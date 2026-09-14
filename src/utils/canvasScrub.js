@@ -149,10 +149,17 @@ export function initCanvasScrub({
     }
   });
 
-  // Text Reveal Timeline at textRevealAt (85%)
+  // Text Reveal Timeline at textRevealAt (85%) with Stagger
   const overlay = triggerEl.querySelector('.hero-content-reveal');
   if (overlay) {
-    gsap.set(overlay, { opacity: 0, y: 24 });
+    const label = overlay.querySelector('.hero-top-label');
+    const title = overlay.querySelector('.hero-main-title');
+    const subtext = overlay.querySelector('.hero-subtext');
+    const cta = overlay.querySelector('.hero-cta-wrap');
+
+    const elements = [label, title, subtext, cta].filter(Boolean);
+    gsap.set(overlay, { opacity: 0 });
+    gsap.set(elements, { opacity: 0, y: 20 });
 
     ScrollTrigger.create({
       trigger: triggerEl,
@@ -162,16 +169,29 @@ export function initCanvasScrub({
         if (self.progress >= textRevealAt) {
           gsap.to(overlay, {
             opacity: 1,
+            duration: 0.6,
+            ease: 'power2.out',
+            overwrite: 'auto'
+          });
+          gsap.to(elements, {
+            opacity: 1,
             y: 0,
             duration: 0.8,
-            ease: 'power2.out',
+            stagger: 0.1,
+            ease: 'power3.out',
             overwrite: 'auto'
           });
         } else {
           gsap.to(overlay, {
             opacity: 0,
-            y: 24,
-            duration: 0.4,
+            duration: 0.3,
+            ease: 'power2.in',
+            overwrite: 'auto'
+          });
+          gsap.to(elements, {
+            opacity: 0,
+            y: 20,
+            duration: 0.3,
             ease: 'power2.in',
             overwrite: 'auto'
           });

@@ -100,16 +100,16 @@ export function initServices() {
   const cards = container.querySelectorAll('.service-card');
   if (cards.length > 0) {
     gsap.fromTo(cards,
-      { opacity: 0, y: 30 },
+      { opacity: 0, y: 40 },
       {
         opacity: 1,
         y: 0,
-        duration: 0.6,
-        stagger: 0.08,
-        ease: 'power2.out',
+        duration: 0.75,
+        stagger: 0.1,
+        ease: 'power3.out',
         scrollTrigger: {
           trigger: '#services-grid',
-          start: 'top 80%',
+          start: 'top 75%',
           toggleActions: 'play none none none'
         }
       }

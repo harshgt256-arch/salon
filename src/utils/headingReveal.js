@@ -60,14 +60,24 @@ function splitIntoWords(el) {
   const original = el.textContent.trim().replace(/\s+/g, ' ');
   el.textContent = '';
   const inners = [];
-  original.split(' ').forEach((word) => {
+  const words = original.split(' ');
+  words.forEach((word, index) => {
     const mask = document.createElement('span');
     mask.className = 'reveal-line-mask';
+    // Ensure the span is inline-block to accept spacing
+    mask.style.display = 'inline-block';
+    
     const inner = document.createElement('span');
     inner.className = 'reveal-word-inner';
     inner.textContent = word;
     mask.appendChild(inner);
     el.appendChild(mask);
+    
+    // Add a space after the word, if not the last one
+    if (index < words.length - 1) {
+      el.appendChild(document.createTextNode(' '));
+    }
+    
     inners.push(inner);
   });
   return inners;

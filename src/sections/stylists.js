@@ -1,3 +1,8 @@
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
+
 export function initStylists() {
   const container = document.getElementById('stylists');
   if (!container) return;
@@ -50,4 +55,24 @@ export function initStylists() {
       </div>
     </div>
   `;
+
+  // Add stagger animation on scroll
+  const cards = container.querySelectorAll('.stylist-card');
+  if (cards.length > 0) {
+    gsap.fromTo(cards,
+      { opacity: 0, y: 30 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        stagger: 0.15,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: '.stylists-grid',
+          start: 'top 80%',
+          toggleActions: 'play none none none'
+        }
+      }
+    );
+  }
 }
