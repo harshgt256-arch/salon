@@ -2850,6 +2850,237 @@ body:has(.mobile-menu.open) .fixed-nav {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   MOBILE TYPOGRAPHY ENHANCEMENT — Readable, comfortable text
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Base body text */
+  body {
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  /* Hero section */
+  .hero-top-label {
+    font-size: 15px;
+  }
+
+  .hero-subtext {
+    font-size: 17px !important;
+  }
+
+  /* Navigation */
+  .logo {
+    font-size: 20px;
+  }
+
+  /* Trust Bar */
+  .badge-label {
+    font-size: 11px;
+  }
+
+  /* Transformation section */
+  .transformation-label {
+    font-size: 16px;
+  }
+
+  .transformation-subtitle {
+    font-size: 17px;
+  }
+
+  /* Services */
+  .services-heading {
+    font-size: 42px;
+  }
+
+  .services-subtext {
+    font-size: 19px;
+  }
+
+  .service-title {
+    font-size: 26px;
+  }
+
+  .service-desc {
+    font-size: 16px;
+  }
+
+  .service-price {
+    font-size: 17px;
+  }
+
+  /* Process section */
+  .process-step-number {
+    font-size: 18px;
+  }
+
+  .process-step-title {
+    font-size: 22px;
+  }
+
+  .process-step-desc {
+    font-size: 16px;
+  }
+
+  /* Stylists */
+  .stylists-heading {
+    font-size: 42px;
+  }
+
+  .stylists-subtext {
+    font-size: 19px;
+  }
+
+  .stylist-name {
+    font-size: 24px;
+  }
+
+  .stylist-role {
+    font-size: 16px;
+  }
+
+  .stylist-bio {
+    font-size: 15px;
+  }
+
+  /* Testimonials */
+  .testimonial-text {
+    font-size: 20px;
+  }
+
+  .testimonial-name {
+    font-size: 17px;
+  }
+
+  .testimonial-service {
+    font-size: 15px;
+  }
+
+  /* Pricing */
+  .pricing-heading {
+    font-size: 42px;
+  }
+
+  .pricing-tier-name {
+    font-size: 26px;
+  }
+
+  .pricing-tier-price {
+    font-size: 52px;
+  }
+
+  .pricing-tier-desc {
+    font-size: 16px;
+  }
+
+  .pricing-feature {
+    font-size: 15px;
+  }
+
+  /* FAQ */
+  .faq-heading {
+    font-size: 42px;
+  }
+
+  .faq-question {
+    font-size: 19px;
+  }
+
+  .faq-answer p {
+    font-size: 16px;
+  }
+
+  /* Instagram section */
+  .instagram-heading {
+    font-size: 42px;
+  }
+
+  .instagram-subtitle {
+    font-size: 19px;
+  }
+
+  /* CTA section */
+  .cta-heading {
+    font-size: 42px;
+  }
+
+  .cta-subtext {
+    font-size: 19px;
+  }
+
+  /* Footer */
+  .footer-col-title {
+    font-size: 22px;
+  }
+
+  .footer-link {
+    font-size: 15px;
+  }
+
+  .footer-tagline {
+    font-size: 17px;
+  }
+
+  .newsletter-input {
+    font-size: 15px;
+  }
+
+  .newsletter-submit {
+    font-size: 15px;
+  }
+
+  .footer-legal-text {
+    font-size: 14px;
+  }
+
+  .legal-links a {
+    font-size: 14px;
+  }
+
+  /* Buttons */
+  .btn,
+  .book-now,
+  .btn-gold,
+  .hero-book-cta {
+    font-size: 15px;
+    padding: 14px 30px;
+  }
+
+  /* Section headers - universal */
+  .section-title {
+    font-size: clamp(2.25rem, 8vw, 3rem);
+  }
+
+  .section-desc {
+    font-size: 17px;
+    line-height: 1.7;
+  }
+
+  .eyebrow {
+    font-size: 14px;
+  }
+
+  /* Press marquee */
+  .press-item {
+    font-size: 16px;
+  }
+
+  /* Scroll indicator */
+  .scroll-indicator {
+    font-size: 12px;
+  }
+
+  /* Badges and chips */
+  .highlight-chip {
+    font-size: 15px;
+  }
+
+  /* Before/After badges */
+  .ba-badge {
+    font-size: 11px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
    REDUCED MOTION — calm experience, all content visible
    ══════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
