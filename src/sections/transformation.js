@@ -9,8 +9,8 @@ export function initTransformation() {
       <!-- Header -->
       <div class="transformation-header">
         <span class="transformation-label">The Noir Difference</span>
-        <h2 class="transformation-heading">Your Most Beautiful Self</h2>
-        <p class="transformation-subtitle">Drag to reveal the transformation</p>
+        <h2 class="transformation-heading" data-reveal="lines">Your Most Beautiful Self</h2>
+        <p class="transformation-subtitle" data-reveal-child>Drag to reveal the transformation</p>
         <div class="drag-arrow">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M5 12h14M5 12l4-4M5 12l4 4M19 12l-4-4M19 12l-4 4"/>

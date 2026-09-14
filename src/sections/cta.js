@@ -14,8 +14,8 @@ export function initCta() {
 
       <!-- Content -->
       <div class="cta-content">
-        <h2 class="cta-heading">Ready to Feel Your Most Beautiful?</h2>
-        <p class="cta-subtext">Book your experience today — new clients always welcome</p>
+        <h2 class="cta-heading" data-reveal="clip">Ready to Feel Your Most Beautiful?</h2>
+        <p class="cta-subtext" data-reveal-child>Book your experience today — new clients always welcome</p>
 
         <div class="cta-buttons">
           <button class="cta-btn cta-btn-primary" id="trigger-booking">Book Online</button>

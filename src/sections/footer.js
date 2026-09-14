@@ -57,6 +57,9 @@ export function initFooter() {
 
       </div>
 
+      <!-- Oversized ghost wordmark -->
+      <div class="footer-wordmark" aria-hidden="true">NOIR STUDIO</div>
+
       <!-- Bottom Row -->
       <div class="footer-bottom">
         <div class="footer-bottom-info">

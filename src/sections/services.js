@@ -12,62 +12,85 @@ export function initServices() {
       title: 'Hair Cut & Style',
       desc: 'Precision cuts and blowouts tailored to your face shape, hair texture, and personal style. From classic bobs to modern layers.',
       price: 'from £75',
-      icon: '<path d="M14 6l4-4 4 4M21 3L3 21M7 10L3 6l4-4M3 21l8-8M13 11l4 4-4 4-4-4z"/>' // Abstract scissors/shear style
+      img: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&w=800&h=600&q=80',
+      alt: 'Stylist precision-cutting a client’s hair at a marble station'
     },
     {
       title: 'Balayage & Colour',
       desc: 'Hand-painted balayage, full colour, highlights, and toning by our colour specialists. Every shade is custom-blended for you.',
       price: 'from £110',
-      icon: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>' // Pallet/Color flow
+      img: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&h=600&q=80',
+      alt: 'Glossy balayage colour being painted freehand'
     },
     {
       title: 'Bridal Hair',
       desc: 'Bridal and occasion updos, half-ups, and styling with a full trial appointment included. Your perfect look, rehearsed.',
       price: 'from £150',
-      icon: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' // Elegant motif
+      img: 'https://images.unsplash.com/photo-1594552072238-b8a33785b261?auto=format&fit=crop&w=800&h=600&q=80',
+      alt: 'Bridal gown and veil prepared for the wedding morning'
     },
     {
       title: 'Face Spa',
       desc: 'Customised facial treatments using premium skincare: deep cleanse, exfoliation, mask, and massage. Your skin, transformed.',
       price: 'from £85',
-      icon: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>' // Water/care droplet
+      img: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&h=600&q=80',
+      alt: 'Relaxing facial spa treatment in a candlelit room'
     },
     {
       title: 'Makeup',
       desc: 'Full glam, natural, and editorial makeup for every occasion. Long-wear formulas, airbrush available on request.',
       price: 'from £95',
-      icon: '<path d="M12 2c1.66 0 3 1.34 3 3v2h-6V5c0-1.66 1.34-3 3-3zm-6 7h12a2 2 0 0 1 2 2v1l-3-3l-3 3l-3-3l-3 3v-1a2 2 0 0 1 2-2zM4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4H4z"/>' // Compact/Brush styled
+      img: 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?auto=format&fit=crop&w=800&h=600&q=80',
+      alt: 'Artist applying editorial glam makeup'
     },
     {
       title: 'Lash & Brow',
       desc: 'Lash lift and tint, brow lamination, HD brows, and threading. Frame your face beautifully.',
       price: 'from £45',
-      icon: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>' // Eye line-icon
+      img: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&h=600&q=80',
+      alt: 'Curated cosmetics for lash and brow styling'
     }
   ];
 
   container.innerHTML = `
     <div class="services-wrapper">
       <div class="services-header">
-        <h2 class="services-heading">Our Services</h2>
-        <p class="services-subtext">Every service crafted for the woman who values herself</p>
+        <h2 class="services-heading" data-reveal="lines">Our Services</h2>
+        <p class="services-subtext" data-reveal-child>Every service crafted for the woman who values herself</p>
       </div>
 
       <div class="services-grid" id="services-grid">
-        ${servicesData.map(s => `
-          <div class="service-card">
-            <div class="service-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
-                ${s.icon}
-              </svg>
+        ${servicesData.map((s, i) => `
+          <article class="service-card">
+            <div class="service-media">
+              <img
+                class="service-img"
+                src="${s.img}"
+                alt="${s.alt}"
+                loading="lazy"
+                decoding="async"
+              />
+              <div class="service-veil"></div>
+              <span class="service-price-tag">${s.price}</span>
+              <span class="service-arrow" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </span>
             </div>
-            <h3 class="service-title">${s.title}</h3>
-            <p class="service-desc">${s.desc}</p>
-            <div class="service-footer">
-              <span class="service-price">${s.price}</span>
-              <a href="#cta" class="service-book">Book This &rarr;</a>
+
+            <div class="service-body">
+              <span class="service-num">0${i + 1}</span>
+              <h3 class="service-title">${s.title}</h3>
+              <p class="service-desc">${s.desc}</p>
+              <a href="#cta" class="service-book">
+                Book This
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </a>
             </div>
-          </div>
+          </article>
         `).join('')}
       </div>
     </div>

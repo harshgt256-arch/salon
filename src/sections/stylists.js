@@ -26,8 +26,8 @@ export function initStylists() {
   container.innerHTML = `
     <div class="stylists-wrapper">
       <div class="stylists-header">
-        <h2 class="stylists-heading">Meet Your Artists</h2>
-        <p class="stylists-subtext">Specialists who listen, create, and care</p>
+        <h2 class="stylists-heading" data-reveal="lines">Meet Your Artists</h2>
+        <p class="stylists-subtext" data-reveal-child>Specialists who listen, create, and care</p>
       </div>
 
       <div class="stylists-grid">

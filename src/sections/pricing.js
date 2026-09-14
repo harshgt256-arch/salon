@@ -47,8 +47,8 @@ export function initPricing() {
   container.innerHTML = `
     <div class="pricing-wrapper">
       <div class="pricing-header">
-        <h2 class="pricing-heading">Treat Yourself</h2>
-        <p class="pricing-subtext">Every package includes a personal consultation and finishing styling</p>
+        <h2 class="pricing-heading" data-reveal="lines">Treat Yourself</h2>
+        <p class="pricing-subtext" data-reveal-child>Every package includes a personal consultation and finishing styling</p>
       </div>
 
       <div class="pricing-grid">

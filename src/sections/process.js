@@ -33,7 +33,7 @@ export function initProcess() {
   container.innerHTML = `
     <div class="process-wrapper">
       <div class="process-header">
-        <h2 class="process-heading">Your Experience, Step by Step</h2>
+        <h2 class="process-heading" data-reveal="lines">Your Experience, Step by Step</h2>
       </div>
 
       <div class="process-timeline" id="process-timeline">

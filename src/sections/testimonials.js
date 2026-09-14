@@ -38,7 +38,7 @@ export function initTestimonials() {
   container.innerHTML = `
     <div class="testimonials-wrapper">
       <div class="testimonials-header">
-        <h2 class="testimonials-heading">Stories from Our Clients</h2>
+        <h2 class="testimonials-heading" data-reveal="lines">Stories from Our Clients</h2>
       </div>
 
       <div class="testimonial-carousel" id="testimonial-carousel">

@@ -8,14 +8,17 @@ gsap.registerPlugin(ScrollTrigger);
 const lenis = new Lenis({
   duration: 1.2,
   easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-  smooth: true,
+  smoothWheel: true,
+  smoothTouch: false, // Ensure native touch scrolling on mobile
 });
 
-function raf(time) {
-  lenis.raf(time);
-  requestAnimationFrame(raf);
-}
-requestAnimationFrame(raf);
+lenis.on('scroll', ScrollTrigger.update);
+
+gsap.ticker.add((time) => {
+  lenis.raf(time * 1000);
+});
+
+gsap.ticker.lagSmoothing(0);
 
 // 2. Constants & Assets
 const CLOUD_NAME = 'j6f3st1w';
@@ -99,7 +102,7 @@ function initCanvasScrub(config, images) {
       trigger: config.triggerId,
       start: 'top top',
       end: 'bottom bottom',
-      scrub: 0.5,
+      scrub: isMobile() ? 1 : 0.5,
       onUpdate: () => {
         drawCover(ctx, canvas, images[Math.round(frameObj.frame)]);
       },

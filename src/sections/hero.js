@@ -28,7 +28,7 @@ export function initHero() {
       <!-- Centered Hero Text Content -->
       <div class="hero-content-reveal">
         <span class="hero-top-label">Premium Women's Beauty Studio</span>
-        <h1 class="hero-main-title">You Deserve to Feel Beautiful</h1>
+        <h1 class="hero-main-title" data-reveal="words" data-reveal-delay="0.15">You Deserve to Feel Beautiful</h1>
         <p class="hero-subtext">Hair · Bridal · Spa · Makeup · Lash & Brow</p>
         <div class="hero-cta-wrap">
           <a href="#cta" class="hero-book-cta">Book Your Experience &rarr;</a>

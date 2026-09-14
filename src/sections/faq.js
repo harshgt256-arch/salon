@@ -32,7 +32,7 @@ export function initFaq() {
   container.innerHTML = `
     <div class="faq-wrapper">
       <div class="faq-header">
-        <h2 class="faq-heading">Your Questions</h2>
+        <h2 class="faq-heading" data-reveal="words">Your Questions</h2>
       </div>
 
       <div class="faq-accordion">
