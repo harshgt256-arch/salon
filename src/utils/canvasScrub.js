@@ -27,8 +27,8 @@ export function initCanvasScrub({
 
   function getFrameUrl(index) {
     if (isLocal) {
-      const padIndex = String(index + 1).padStart(4, '0');
-      return `/frames/${localFolder}/frame_${padIndex}.png`;
+      const padIndex = String(index).padStart(4, '0');
+      return `/frames-export/frames1-desktop/frame-${padIndex}.webp`;
     }
     const padIndex = String(index).padStart(4, '0');
     const folder = isMobile() ? cloudFolderMobile : cloudFolderDesktop;

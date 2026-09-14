@@ -2847,5 +2847,11 @@ body:has(.mobile-menu.open) .fixed-nav {
     opacity: 1;
     transform: none;
   }
+
+  /* Marquee should always animate for visual feedback */
+  .press-marquee {
+    animation-duration: 25s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
