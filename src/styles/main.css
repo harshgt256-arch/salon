@@ -2576,3 +2576,83 @@ canvas {
     height: 16px;
   }
 }
+
+/* Refined Testimonials */
+.testimonials-heading {
+  font-family: var(--font-display);
+  font-size: 52px;
+  font-weight: 300;
+  color: var(--charcoal);
+  margin-bottom: 32px;
+}
+.testimonials-subtext {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.testimonial-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--ivory);
+  border: 1px solid var(--gold-soft);
+  color: var(--gold);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.testimonial-nav:hover {
+  background: var(--gold);
+  color: var(--ivory);
+}
+.testimonial-prev { left: -60px; }
+.testimonial-next { right: -60px; }
+
+/* Refined Pricing */
+.pricing-bullets li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+.pricing-card {
+  transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.pricing-card:hover {
+  transform: translateY(-10px);
+}
+
+/* Refined FAQ */
+.faq-question {
+  padding: 32px 28px;
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+/* Refined Instagram */
+.instagram-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+.instagram-tag {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+  text-transform: uppercase;
+}
+.instagram-title {
+  font-family: var(--font-display);
+  font-size: 42px;
+  margin: 16px 0;
+}
+.instagram-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}

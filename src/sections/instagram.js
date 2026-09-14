@@ -1,3 +1,8 @@
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
+
 export function initInstagram() {
   const container = document.getElementById('instagram');
   if (!container) return;
@@ -38,16 +43,18 @@ export function initInstagram() {
   container.innerHTML = `
     <div class="instagram-wrapper">
       <div class="instagram-header">
-        <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" class="instagram-handle">@noirstudio</a>
+        <span class="instagram-tag" data-reveal-child>FOLLOW OUR JOURNEY</span>
+        <h2 class="instagram-title" data-reveal="lines">Atelier Moments</h2>
+        <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" class="instagram-handle">@noirstudio &rarr;</a>
       </div>
 
       <div class="instagram-grid">
-        ${posts.map(p => `
-          <div class="instagram-card">
-            <img src="${p.img}" alt="${p.alt}" class="instagram-img" />
+        ${posts.map((p, idx) => `
+          <div class="instagram-card" data-index="${idx}">
+            <img src="${p.img}" alt="${p.alt}" class="instagram-img" loading="lazy" />
             <div class="instagram-overlay">
               <div class="instagram-likes">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                   <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                 </svg>
                 <span>${p.likes}</span>
@@ -58,4 +65,25 @@ export function initInstagram() {
       </div>
     </div>
   `;
+
+  // Stagger reveal on scroll
+  const cards = container.querySelectorAll('.instagram-card');
+  if (cards.length > 0) {
+    gsap.fromTo(cards,
+      { opacity: 0, y: 30, scale: 0.96 },
+      {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.7,
+        stagger: 0.08,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: '.instagram-grid',
+          start: 'top 80%',
+          toggleActions: 'play none none none'
+        }
+      }
+    );
+  }
 }

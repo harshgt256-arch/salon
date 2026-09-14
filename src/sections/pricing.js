@@ -1,3 +1,8 @@
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
+
 export function initPricing() {
   const container = document.getElementById('pricing');
   if (!container) return;
@@ -53,7 +58,7 @@ export function initPricing() {
 
       <div class="pricing-grid">
         ${packages.map((pkg, idx) => `
-          <div class="pricing-card ${pkg.featured ? 'featured' : ''}" id="pricing-card-${idx}">
+          <div class="pricing-card ${pkg.featured ? 'featured' : ''}" data-index="${idx}">
             ${pkg.featured ? `<div class="pricing-badge">${pkg.badge}</div>` : ''}
 
             <h3 class="pricing-name">${pkg.name}</h3>
@@ -63,8 +68,10 @@ export function initPricing() {
             <ul class="pricing-bullets">
               ${pkg.bullets.map(b => `
                 <li>
-                  <span class="bullet-check">✓</span>
-                  ${b}
+                  <svg class="bullet-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  <span>${b}</span>
                 </li>
               `).join('')}
             </ul>
@@ -75,4 +82,25 @@ export function initPricing() {
       </div>
     </div>
   `;
+
+  // Stagger card entrance
+  const cards = container.querySelectorAll('.pricing-card');
+  if (cards.length > 0) {
+    gsap.fromTo(cards,
+      { opacity: 0, y: 40, scale: 0.98 },
+      {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.8,
+        stagger: 0.15,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: '.pricing-grid',
+          start: 'top 75%',
+          toggleActions: 'play none none none'
+        }
+      }
+    );
+  }
 }

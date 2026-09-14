@@ -1,4 +1,7 @@
 import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 export function initTestimonials() {
   const container = document.getElementById('testimonials');
@@ -39,6 +42,7 @@ export function initTestimonials() {
     <div class="testimonials-wrapper">
       <div class="testimonials-header">
         <h2 class="testimonials-heading" data-reveal="lines">Stories from Our Clients</h2>
+        <p class="testimonials-subtext" data-reveal-child>Real experiences from women who trust us with their beauty</p>
       </div>
 
       <div class="testimonial-carousel" id="testimonial-carousel">
@@ -50,7 +54,7 @@ export function initTestimonials() {
                 <blockquote class="testimonial-quote">"${t.quote}"</blockquote>
               </div>
               <div class="testimonial-author">
-                <img src="${t.photo}" alt="${t.name}" class="testimonial-photo" />
+                <img src="${t.photo}" alt="${t.name}" class="testimonial-photo" loading="lazy" />
                 <div class="testimonial-info">
                   <div class="testimonial-name">${t.name}</div>
                   <div class="testimonial-detail">${t.detail}</div>
@@ -59,6 +63,18 @@ export function initTestimonials() {
             </div>
           `).join('')}
         </div>
+
+        <!-- Navigation Arrows -->
+        <button class="testimonial-nav testimonial-prev" aria-label="Previous testimonial">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+        </button>
+        <button class="testimonial-nav testimonial-next" aria-label="Next testimonial">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </button>
 
         <!-- Dot Indicators -->
         <div class="testimonial-dots">
@@ -73,41 +89,40 @@ export function initTestimonials() {
   // Carousel Logic
   const slides = container.querySelectorAll('.testimonial-slide');
   const dots = container.querySelectorAll('.testimonial-dot');
+  const prevBtn = container.querySelector('.testimonial-prev');
+  const nextBtn = container.querySelector('.testimonial-next');
   const carouselEl = document.getElementById('testimonial-carousel');
   let currentIndex = 0;
   let autoAdvanceTimer = null;
   let isPaused = false;
 
   function showSlide(index) {
-    // Remove active class from all
     slides.forEach(s => {
       s.classList.remove('active');
-      s.style.visibility = 'hidden';
+      gsap.set(s, { opacity: 0, visibility: 'hidden' });
     });
     dots.forEach(d => d.classList.remove('active'));
 
-    // Add active to current
     if (slides[index]) {
       slides[index].classList.add('active');
-      slides[index].style.visibility = 'visible';
-    }
-    if (dots[index]) dots[index].classList.add('active');
-
-    currentIndex = index;
-
-    // Animate entrance
-    const activeSlide = slides[index];
-    if (activeSlide) {
-      gsap.fromTo(activeSlide,
-        { opacity: 0, y: -8 },
-        { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }
+      gsap.set(slides[index], { visibility: 'visible' });
+      gsap.fromTo(slides[index],
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out' }
       );
     }
+    if (dots[index]) dots[index].classList.add('active');
+    currentIndex = index;
   }
 
   function nextSlide() {
     const next = (currentIndex + 1) % slides.length;
     showSlide(next);
+  }
+
+  function prevSlide() {
+    const prev = (currentIndex - 1 + slides.length) % slides.length;
+    showSlide(prev);
   }
 
   function startAutoAdvance() {
@@ -124,16 +139,31 @@ export function initTestimonials() {
     }
   }
 
-  // Dot click handlers
+  // Event handlers
   dots.forEach((dot, idx) => {
     dot.addEventListener('click', () => {
       showSlide(idx);
       stopAutoAdvance();
-      setTimeout(startAutoAdvance, 1000);
+      setTimeout(startAutoAdvance, 2000);
     });
   });
 
-  // Pause on hover
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      prevSlide();
+      stopAutoAdvance();
+      setTimeout(startAutoAdvance, 2000);
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      nextSlide();
+      stopAutoAdvance();
+      setTimeout(startAutoAdvance, 2000);
+    });
+  }
+
   if (carouselEl) {
     carouselEl.addEventListener('mouseenter', () => {
       isPaused = true;
@@ -156,27 +186,35 @@ export function initTestimonials() {
 
     carouselEl.addEventListener('touchend', (e) => {
       touchEndX = e.changedTouches[0].screenX;
-      handleSwipe();
+      const swipeThreshold = 50;
+      if (touchEndX < touchStartX - swipeThreshold) {
+        nextSlide();
+        stopAutoAdvance();
+        setTimeout(startAutoAdvance, 2000);
+      }
+      if (touchEndX > touchStartX + swipeThreshold) {
+        prevSlide();
+        stopAutoAdvance();
+        setTimeout(startAutoAdvance, 2000);
+      }
     }, { passive: true });
   }
 
-  function handleSwipe() {
-    const swipeThreshold = 50;
-    if (touchEndX < touchStartX - swipeThreshold) {
-      // Swipe left
-      nextSlide();
-      stopAutoAdvance();
-      setTimeout(startAutoAdvance, 1000);
-    }
-    if (touchEndX > touchStartX + swipeThreshold) {
-      // Swipe right
-      const prev = (currentIndex - 1 + slides.length) % slides.length;
-      showSlide(prev);
-      stopAutoAdvance();
-      setTimeout(startAutoAdvance, 1000);
-    }
-  }
-
-  // Start auto-advance
   startAutoAdvance();
+
+  // Scroll-triggered entrance animation
+  gsap.fromTo('.testimonial-carousel',
+    { opacity: 0, y: 40 },
+    {
+      opacity: 1,
+      y: 0,
+      duration: 1,
+      ease: 'power3.out',
+      scrollTrigger: {
+        trigger: container,
+        start: 'top 75%',
+        toggleActions: 'play none none none'
+      }
+    }
+  );
 }

@@ -1,3 +1,8 @@
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
+
 export function initFaq() {
   const container = document.getElementById('faq');
   if (!container) return;
@@ -32,7 +37,8 @@ export function initFaq() {
   container.innerHTML = `
     <div class="faq-wrapper">
       <div class="faq-header">
-        <h2 class="faq-heading" data-reveal="words">Your Questions</h2>
+        <h2 class="faq-heading" data-reveal="lines">Your Questions</h2>
+        <p class="faq-subtext" data-reveal-child>Everything you need to know about your appointment</p>
       </div>
 
       <div class="faq-accordion">
@@ -51,7 +57,7 @@ export function initFaq() {
     </div>
   `;
 
-  // Accordion logic
+  // Accordion logic with smooth animation
   const items = container.querySelectorAll('.faq-item');
 
   items.forEach(item => {
@@ -62,13 +68,15 @@ export function initFaq() {
     question.addEventListener('click', () => {
       const isOpen = item.classList.contains('open');
 
-      // Close all items
+      // Close all other items
       items.forEach(otherItem => {
-        otherItem.classList.remove('open');
-        const otherAnswer = otherItem.querySelector('.faq-answer');
-        const otherIcon = otherItem.querySelector('.faq-icon');
-        if (otherAnswer) otherAnswer.style.maxHeight = '0';
-        if (otherIcon) otherIcon.style.transform = 'rotate(0deg)';
+        if (otherItem !== item) {
+          otherItem.classList.remove('open');
+          const otherAnswer = otherItem.querySelector('.faq-answer');
+          const otherIcon = otherItem.querySelector('.faq-icon');
+          if (otherAnswer) otherAnswer.style.maxHeight = '0';
+          if (otherIcon) otherIcon.style.transform = 'rotate(0deg)';
+        }
       });
 
       // Toggle current item
@@ -76,7 +84,30 @@ export function initFaq() {
         item.classList.add('open');
         answer.style.maxHeight = answer.scrollHeight + 'px';
         icon.style.transform = 'rotate(45deg)';
+      } else {
+        item.classList.remove('open');
+        answer.style.maxHeight = '0';
+        icon.style.transform = 'rotate(0deg)';
       }
     });
   });
+
+  // Scroll entrance
+  if (items.length > 0) {
+    gsap.fromTo(items,
+      { opacity: 0, y: 20 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.6,
+        stagger: 0.08,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: '.faq-accordion',
+          start: 'top 80%',
+          toggleActions: 'play none none none'
+        }
+      }
+    );
+  }
 }
