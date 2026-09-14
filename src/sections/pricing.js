@@ -76,7 +76,7 @@ export function initPricing() {
               `).join('')}
             </ul>
 
-            <a href="#cta" class="pricing-cta">Book This Package</a>
+            <button href="#cta" class="pricing-cta" data-service="${pkg.name}">Book This Package</button>
           </div>
         `).join('')}
       </div>

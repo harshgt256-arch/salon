@@ -40,18 +40,18 @@ export function initCta() {
           </div>
           <div class="form-group">
             <div class="select-wrapper">
-              <select required>
+              <select id="modal-service-select" required>
                 <option value="">Select Primary Service</option>
-                <option>Hair Cut & Styling</option>
-                <option>Balayage & Colour</option>
-                <option>Bridal Suite</option>
-                <option>Face Spa & Skincare</option>
-                <option>Makeup / Lash & Brow</option>
+                <option value="Hair Cut & Style">Hair Cut & Style</option>
+                <option value="Balayage & Colour">Balayage & Colour</option>
+                <option value="Bridal Hair">Bridal Suite</option>
+                <option value="Face Spa">Face Spa & Skincare</option>
+                <option value="Makeup">Makeup / Lash & Brow</option>
               </select>
             </div>
           </div>
           <div class="form-group">
-            <textarea placeholder="Tell us about your hair or skin history..." rows="4"></textarea>
+            <textarea id="modal-notes" placeholder="Tell us about your hair or skin history..." rows="4"></textarea>
           </div>
           <button type="submit" class="modal-submit-btn">Submit Request &rarr;</button>
         </form>
@@ -84,10 +84,24 @@ export function initCta() {
   const triggerBtn = document.getElementById('trigger-booking');
   const closeBtn = container.querySelector('.close-btn');
   const modalContent = container.querySelector('.modal-content');
+  const serviceSelect = document.getElementById('modal-service-select');
+  const notesTextarea = document.getElementById('modal-notes');
 
-  function openModal() {
+  function openModal(preset = {}) {
     modal.classList.add('active');
-    document.body.style.overflow = 'hidden'; // Prevent scrolling
+    document.body.style.overflow = 'hidden';
+
+    // Concierge deep-linking preset
+    if (preset.service && serviceSelect) {
+      const match = Array.from(serviceSelect.options).find(opt => 
+        opt.value.toLowerCase().includes(preset.service.toLowerCase()) || 
+        preset.service.toLowerCase().includes(opt.value.toLowerCase())
+      );
+      if (match) serviceSelect.value = match.value;
+    }
+    if (preset.stylist && notesTextarea) {
+      notesTextarea.value = `Preferred Artist: ${preset.stylist}\n`;
+    }
     
     // Animate in
     gsap.fromTo(modalContent, 
@@ -101,7 +115,6 @@ export function initCta() {
   }
 
   function closeModal() {
-    // Animate out
     gsap.to(modalContent, {
       y: 20, opacity: 0, scale: 0.98, duration: 0.3, ease: 'power2.in'
     });
@@ -114,8 +127,18 @@ export function initCta() {
     });
   }
 
+  // Global listener for booking triggers across the site
+  document.addEventListener('click', (e) => {
+    const bookLink = e.target.closest('a[href="#cta"], button[href="#cta"], .book-now, .hero-book-cta, .pricing-cta, .mobile-menu-cta, .stylist-book-btn');
+    if (bookLink && !bookLink.id === 'trigger-booking') {
+      const service = bookLink.dataset.service;
+      const stylist = bookLink.dataset.stylist;
+      openModal({ service, stylist });
+    }
+  });
+
   if (triggerBtn && modal) {
-    triggerBtn.addEventListener('click', openModal);
+    triggerBtn.addEventListener('click', () => openModal());
   }
   if (closeBtn) {
     closeBtn.addEventListener('click', closeModal);

@@ -47,7 +47,7 @@ export function initStylists() {
               <p class="stylist-bio">${s.bio}</p>
               <div class="stylist-actions">
                 <a href="#instagram" class="stylist-portfolio-link">View Portfolio &rarr;</a>
-                <a href="#cta" class="stylist-book-btn">Book with ${s.name.split(' ')[0]} &rarr;</a>
+                <button href="#cta" class="stylist-book-btn" data-stylist="${s.name}">Book with ${s.name.split(' ')[0]} &rarr;</a>
               </div>
             </div>
           </div>
