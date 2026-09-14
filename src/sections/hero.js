@@ -53,7 +53,7 @@ export function initHero() {
       isLocal: true,
       localFolder: 'scene1-desktop',
       canvasId: 'hero-canvas',
-      totalFrames: 240,
+      totalFrames: 144,
       pinDistance: '1620px',
       textRevealAt: 0.85,
       triggerId: '#hero',
