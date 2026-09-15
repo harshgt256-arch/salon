@@ -1,62 +1,55 @@
 /**
  * ============================================================================
- * NOIR STUDIO — DIRECT APPOINTMENT AUTOMATION (GOOGLE APPS SCRIPT)
+ * NOIR STUDIO — 2-WAY WHATSAPP & APPOINTMENT AUTOMATION SYSTEM
  * ============================================================================
  *
- * Features:
- * 1. Webhook endpoint (doPost) for website booking submissions.
- * 2. Auto-records bookings into Google Sheets ("Bookings" sheet).
- * 3. Auto-creates events on Google Calendar with client details.
- * 4. Sends instant Email confirmation to client & salon owner.
- * 5. Sends WhatsApp confirmation / 24-hr reminder via Twilio WhatsApp API.
- * 6. Daily automatic scheduled trigger to send next-day appointment reminders.
- *
- * ----------------------------------------------------------------------------
- * SETUP INSTRUCTIONS (5 MINUTES):
- * ----------------------------------------------------------------------------
- * 1. Open Google Sheets (https://sheets.new).
- * 2. Rename the active sheet tab at the bottom to "Bookings".
- * 3. In Google Sheets, click Extensions > Apps Script.
- * 4. Delete any code in Code.gs and paste this entire file.
- * 5. Update the CONFIG object below with your details (Sheet ID, Twilio/Email).
- * 6. Click "Deploy" > "New deployment".
- *    - Type: Web app
- *    - Description: Salon Booking Backend
- *    - Execute as: Me
- *    - Who has access: Anyone
- * 7. Click Deploy, authorize permissions, and copy the "Web app URL".
- * 8. Paste that Web App URL into your salon website (cta.js or window.SALON_BOOKING_WEBHOOK_URL).
- * 9. To enable Daily Reminders: Run the function `setupDailyReminderTrigger()` once in Apps Script!
+ * Capabilities:
+ * 1. Webhook for Website Form Submissions -> Sheets + Google Calendar
+ * 2. 2-Way WhatsApp Reply Handler:
+ *    - Client replies "YES" -> Sheet status becomes "CONFIRMED" + Calendar title updated
+ *    - Client replies "RESCHEDULE" / "CANCEL" -> Sheet status becomes "RESCHEDULE_REQUESTED"
+ *      and instant WhatsApp notification alert is sent to Salon Owner!
+ * 3. Daily 9:00 AM Cron Reminder: Sends WhatsApp reminders for tomorrow's appointments.
  * ============================================================================
  */
 
 const CONFIG = {
-  // Salon Business Details
   SALON_NAME: "Noir Studio",
-  SALON_OWNER_EMAIL: "owner@noir-studio.com", // Replace with salon manager's email
+  SALON_OWNER_PHONE: "+919876543210", // Put salon manager's WhatsApp number with country code
+  SALON_OWNER_EMAIL: "owner@noir-studio.com",
   SALON_PHONE: "+1 (310) 555-0000",
   SALON_ADDRESS: "450 N Rodeo Dr, Beverly Hills, CA",
-
-  // Sheet Tab Name
   SHEET_NAME: "Bookings",
 
-  // Twilio WhatsApp Configuration (Optional - leave blank if using Email only)
+  // Twilio WhatsApp Setup (Optional)
   TWILIO: {
-    ACCOUNT_SID: "YOUR_TWILIO_ACCOUNT_SID",       // e.g. ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    AUTH_TOKEN: "YOUR_TWILIO_AUTH_TOKEN",         // e.g. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    WHATSAPP_FROM: "whatsapp:+14155238886"        // Twilio Sandbox or approved sender number
+    ACCOUNT_SID: "",       // Your Twilio Account SID
+    AUTH_TOKEN: "",        // Your Twilio Auth Token
+    WHATSAPP_FROM: "whatsapp:+14155238886" // Twilio WhatsApp number
   }
 };
 
 /**
- * Handle incoming POST requests from the website booking form
+ * Handle incoming POST requests:
+ * - Route 1: Website Booking Form submission
+ * - Route 2: 2-Way Twilio WhatsApp Inbound Reply (YES / RESCHEDULE)
  */
 function doPost(e) {
   try {
-    let data;
+    // Check if this is a Twilio WhatsApp Webhook (Form URL-Encoded)
+    if (e.parameter && (e.parameter.From || e.parameter.Body)) {
+      return handleTwilioInboundWhatsApp(e.parameter);
+    }
+
+    // Otherwise, handle website JSON booking submission
+    let data = {};
     if (e.postData && e.postData.contents) {
-      data = JSON.parse(e.postData.contents);
-    } else {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch (err) {
+        data = e.parameter || {};
+      }
+    } else if (e.parameter) {
       data = e.parameter;
     }
 
@@ -69,19 +62,18 @@ function doPost(e) {
       preferred_date: (data.preferred_date || "").trim(),
       preferred_time: (data.preferred_time || "10:00").trim(),
       message: (data.message || "").trim(),
-      status: "CONFIRMED",
+      status: "BOOKED",
       created_at: new Date().toISOString()
     };
 
-    // Validation
     if (!booking.client_name || !booking.client_phone || !booking.preferred_date) {
       return ContentService.createTextOutput(JSON.stringify({
         success: false,
-        message: "Missing required fields: Name, Phone, and Preferred Date are mandatory."
+        message: "Missing required fields"
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 1. Record to Google Sheet
+    // 1. Append to Google Sheet
     const sheet = getOrCreateBookingsSheet();
     sheet.appendRow([
       booking.booking_id,
@@ -100,7 +92,7 @@ function doPost(e) {
     try {
       createCalendarEvent(booking);
     } catch (calErr) {
-      Logger.log("Calendar creation error: " + calErr.toString());
+      Logger.log("Calendar error: " + calErr.toString());
     }
 
     // 3. Send Email Notification
@@ -108,27 +100,27 @@ function doPost(e) {
       try {
         sendClientConfirmationEmail(booking);
       } catch (mailErr) {
-        Logger.log("Email confirmation error: " + mailErr.toString());
+        Logger.log("Email error: " + mailErr.toString());
       }
     }
 
-    // 4. Send Instant WhatsApp Confirmation (if Twilio is configured)
-    if (CONFIG.TWILIO.ACCOUNT_SID && !CONFIG.TWILIO.ACCOUNT_SID.includes("YOUR_")) {
+    // 4. Send Instant WhatsApp Confirmation
+    if (CONFIG.TWILIO.ACCOUNT_SID) {
       try {
         sendWhatsAppConfirmation(booking);
       } catch (waErr) {
-        Logger.log("WhatsApp sending error: " + waErr.toString());
+        Logger.log("WhatsApp error: " + waErr.toString());
       }
     }
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       booking_id: booking.booking_id,
-      message: "Appointment successfully booked and confirmed!"
+      message: "Appointment successfully booked!"
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
-    Logger.log("Error handling booking: " + error.toString());
+    Logger.log("Error: " + error.toString());
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
       error: error.toString()
@@ -137,18 +129,84 @@ function doPost(e) {
 }
 
 /**
- * Handle GET requests (Health check / status)
+ * 2-WAY WHATSAPP HANDLER: Process client replies (YES / RESCHEDULE / CANCEL)
+ */
+function handleTwilioInboundWhatsApp(params) {
+  const fromNumber = (params.From || "").replace("whatsapp:", "").trim(); // e.g. +919876543210
+  const incomingMsg = (params.Body || "").trim().toUpperCase(); // e.g. "YES" or "RESCHEDULE"
+
+  Logger.log(`Received WhatsApp reply from ${fromNumber}: ${incomingMsg}`);
+
+  const sheet = getOrCreateBookingsSheet();
+  const data = sheet.getDataRange().getValues();
+  let foundRowIndex = -1;
+  let clientBooking = null;
+
+  // Search for the most recent booking matching this client's phone number
+  for (let i = data.length - 1; i >= 1; i--) {
+    const rawPhone = data[i][3].toString().replace(/[^\d]/g, "");
+    const cleanFrom = fromNumber.replace(/[^\d]/g, "");
+    if (rawPhone.endsWith(cleanFrom) || cleanFrom.endsWith(rawPhone)) {
+      foundRowIndex = i + 1; // 1-indexed sheet row
+      clientBooking = {
+        booking_id: data[i][0],
+        name: data[i][1],
+        email: data[i][2],
+        phone: data[i][3],
+        service: data[i][4],
+        date: data[i][5],
+        time: data[i][6]
+      };
+      break;
+    }
+  }
+
+  let replyXml = "";
+
+  if (foundRowIndex !== -1 && clientBooking) {
+    if (incomingMsg.includes("YES") || incomingMsg.includes("CONFIRM")) {
+      // 1. Update Sheet Status to CONFIRMED
+      sheet.getRange(foundRowIndex, 9).setValue("CONFIRMED");
+      sheet.getRange(foundRowIndex, 9).setBackground("#d4edda").setFontColor("#155724");
+
+      replyXml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✨ Thank you, *${clientBooking.name}*! Your appointment for *${clientBooking.service}* on *${clientBooking.date}* at *${clientBooking.time}* is now fully CONFIRMED. We look forward to seeing you at ${CONFIG.SALON_NAME}!</Message></Response>`;
+
+    } else if (incomingMsg.includes("RESCHEDULE") || incomingMsg.includes("CANCEL") || incomingMsg.includes("CHANGE")) {
+      // 2. Update Sheet Status to RESCHEDULE_REQUESTED
+      sheet.getRange(foundRowIndex, 9).setValue("RESCHEDULE_REQUESTED");
+      sheet.getRange(foundRowIndex, 9).setBackground("#fff3cd").setFontColor("#856404");
+
+      // Notify Salon Owner immediately
+      if (CONFIG.SALON_OWNER_PHONE && CONFIG.TWILIO.ACCOUNT_SID) {
+        const alertMsg = `⚠️ *Reschedule Request!* ⚠️\n\nClient: *${clientBooking.name}*\nPhone: ${clientBooking.phone}\nService: ${clientBooking.service}\nOriginal Date: ${clientBooking.date} at ${clientBooking.time}\n\nPlease call the client to coordinate a new time.`;
+        sendTwilioWhatsApp(formatWhatsAppNumber(CONFIG.SALON_OWNER_PHONE), alertMsg);
+      }
+
+      replyXml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>We received your reschedule request, *${clientBooking.name}*. Our salon concierge will call or message you shortly to pick a new date that fits your schedule!</Message></Response>`;
+
+    } else {
+      replyXml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>Hi *${clientBooking.name}*, please reply *YES* to confirm your appointment or *RESCHEDULE* if you need to adjust your time.</Message></Response>`;
+    }
+  } else {
+    replyXml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>Hello from *${CONFIG.SALON_NAME}*! We could not find an active appointment under this number. Please visit our website or call ${CONFIG.SALON_PHONE} to book.</Message></Response>`;
+  }
+
+  return ContentService.createTextOutput(replyXml).setMimeType(ContentService.MimeType.XML);
+}
+
+/**
+ * Handle GET requests (Health check)
  */
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({
     status: "online",
-    system: "Noir Studio Automated Booking Engine",
+    system: "Noir Studio 2-Way Automated Booking Engine",
     time: new Date().toISOString()
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
- * Get or initialize the Bookings sheet with standard columns
+ * Get or initialize Bookings Sheet
  */
 function getOrCreateBookingsSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -180,59 +238,36 @@ function createCalendarEvent(booking) {
   const cal = CalendarApp.getDefaultCalendar();
   if (!cal) return;
 
-  const [year, month, day] = booking.preferred_date.split("-").map(Number);
-  const [hours, minutes] = (booking.preferred_time || "10:00").split(":").map(Number);
+  const parts = booking.preferred_date.split("-").map(Number);
+  const timeParts = (booking.preferred_time || "10:00").split(":").map(Number);
 
-  const startTime = new Date(year, month - 1, day, hours, minutes, 0);
-  const endTime = new Date(startTime.getTime() + (90 * 60 * 1000)); // Default 90 min duration
+  const startTime = new Date(parts[0], parts[1] - 1, parts[2], timeParts[0], timeParts[1], 0);
+  const endTime = new Date(startTime.getTime() + (90 * 60 * 1000));
 
   const title = `✨ ${CONFIG.SALON_NAME}: ${booking.service_type} - ${booking.client_name}`;
-  const description = `
-Service: ${booking.service_type}
-Client: ${booking.client_name}
-Phone: ${booking.client_phone}
-Email: ${booking.client_email}
-Booking ID: ${booking.booking_id}
-Notes: ${booking.message || "None"}
-  `.trim();
+  const desc = `Service: ${booking.service_type}\nClient: ${booking.client_name}\nPhone: ${booking.client_phone}\nEmail: ${booking.client_email}\nID: ${booking.booking_id}\nNotes: ${booking.message}`;
 
   cal.createEvent(title, startTime, endTime, {
-    description: description,
+    description: desc,
     location: CONFIG.SALON_ADDRESS
   });
 }
 
 /**
- * Send Luxury HTML Confirmation Email to Client
+ * Send Luxury HTML Confirmation Email
  */
 function sendClientConfirmationEmail(booking) {
   const subject = `Reservation Confirmed: ${booking.service_type} at ${CONFIG.SALON_NAME}`;
   const htmlBody = `
-    <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; background-color: #FDFAF5; border: 1px solid #E5DFD5; border-radius: 8px; overflow: hidden;">
-      <div style="background-color: #232323; color: #C9A96A; padding: 36px 24px; text-align: center;">
-        <h1 style="margin: 0; font-size: 26px; letter-spacing: 2px; text-transform: uppercase;">${CONFIG.SALON_NAME}</h1>
-        <p style="margin: 6px 0 0; font-size: 14px; font-style: italic; color: #EDE8DF;">A Sanctuary for Women's Beauty</p>
+    <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; background-color: #FDFAF5; border: 1px solid #E5DFD5; border-radius: 8px; padding: 28px;">
+      <h2 style="color: #232323; margin-top: 0;">Reservation Received ✨</h2>
+      <p>Dear <strong>${booking.client_name}</strong>,</p>
+      <p>Your appointment for <strong>${booking.service_type}</strong> is booked for <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.</p>
+      <div style="background-color: #fff; border: 1px solid #E5DFD5; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="margin: 4px 0;"><strong>Booking ID:</strong> ${booking.booking_id}</p>
+        <p style="margin: 4px 0;"><strong>Location:</strong> ${CONFIG.SALON_ADDRESS}</p>
       </div>
-      <div style="padding: 36px 32px; color: #232323; line-height: 1.6;">
-        <h2 style="font-size: 22px; color: #232323; margin-top: 0;">Reservation Confirmed</h2>
-        <p>Dear <strong>${booking.client_name}</strong>,</p>
-        <p>Your appointment has been reserved. We look forward to delivering an exceptional experience tailored specifically to you.</p>
-
-        <div style="background-color: #FFFFFF; border: 1px solid #E5DFD5; border-radius: 6px; padding: 20px; margin: 24px 0;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-            <tr><td style="padding: 6px 0; color: #767676;">Booking ID:</td><td style="font-weight: bold; color: #232323;">${booking.booking_id}</td></tr>
-            <tr><td style="padding: 6px 0; color: #767676;">Service:</td><td style="font-weight: bold; color: #232323;">${booking.service_type}</td></tr>
-            <tr><td style="padding: 6px 0; color: #767676;">Date:</td><td style="font-weight: bold; color: #232323;">${booking.preferred_date}</td></tr>
-            <tr><td style="padding: 6px 0; color: #767676;">Time:</td><td style="font-weight: bold; color: #232323;">${booking.preferred_time}</td></tr>
-            <tr><td style="padding: 6px 0; color: #767676;">Location:</td><td style="color: #232323;">${CONFIG.SALON_ADDRESS}</td></tr>
-          </table>
-        </div>
-
-        <p style="font-size: 13px; color: #767676;">If you need to reschedule or have special requirements, please contact us at <a href="tel:${CONFIG.SALON_PHONE}" style="color: #A07C3B;">${CONFIG.SALON_PHONE}</a>.</p>
-      </div>
-      <div style="background-color: #F4EFE6; padding: 18px; text-align: center; font-size: 12px; color: #767676; border-top: 1px solid #E5DFD5;">
-        ${CONFIG.SALON_NAME} &bull; ${CONFIG.SALON_ADDRESS}
-      </div>
+      <p style="font-size: 13px; color: #767676;">Need to adjust? Reply to our WhatsApp reminder or call <a href="tel:${CONFIG.SALON_PHONE}" style="color: #A07C3B;">${CONFIG.SALON_PHONE}</a>.</p>
     </div>
   `;
 
@@ -244,24 +279,23 @@ function sendClientConfirmationEmail(booking) {
 }
 
 /**
- * Send Instant WhatsApp Confirmation via Twilio API
+ * Send Instant WhatsApp Confirmation
  */
 function sendWhatsAppConfirmation(booking) {
   const formattedPhone = formatWhatsAppNumber(booking.client_phone);
-  const messageBody = `✨ *${CONFIG.SALON_NAME} — Reservation Confirmed* ✨\n\nDear *${booking.client_name}*,\nYour appointment for *${booking.service_type}* is confirmed for *${booking.preferred_date}* at *${booking.preferred_time}*.\n\n📍 *Location:* ${CONFIG.SALON_ADDRESS}\n\nWe look forward to welcoming you! Reply to this message if you need any assistance.`;
+  const messageBody = `✨ *${CONFIG.SALON_NAME} — Booking Confirmed* ✨\n\nDear *${booking.client_name}*,\nYour appointment for *${booking.service_type}* is reserved for *${booking.preferred_date}* at *${booking.preferred_time}*.\n\n📍 *Address:* ${CONFIG.SALON_ADDRESS}\n\nWe will send a reminder before your appointment. Reply *YES* anytime to confirm!`;
 
   sendTwilioWhatsApp(formattedPhone, messageBody);
 }
 
 /**
- * DAILY CRON REMINDER: Checks for appointments scheduled for tomorrow and sends reminders
+ * DAILY 9:00 AM REMINDER TRIGGER
  */
 function sendDailyAppointmentReminders() {
   const sheet = getOrCreateBookingsSheet();
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return;
 
-  // Calculate tomorrow's date string YYYY-MM-DD
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = Utilities.formatDate(tomorrow, Session.getScriptTimeZone(), "yyyy-MM-dd");
@@ -275,17 +309,17 @@ function sendDailyAppointmentReminders() {
     const serviceType = row[4];
     const preferredTime = row[6];
 
-    if (rowDate === tomorrowStr && status !== "CANCELLED" && status !== "REMINDER_SENT") {
+    if (rowDate === tomorrowStr && status !== "CANCELLED") {
       const formattedPhone = formatWhatsAppNumber(clientPhone);
-      const reminderText = `✨ *Friendly Reminder from ${CONFIG.SALON_NAME}* ✨\n\nHi *${clientName}*,\nThis is a quick reminder for your *${serviceType}* appointment tomorrow (*${rowDate}*) at *${preferredTime}*.\n\n📍 *Address:* ${CONFIG.SALON_ADDRESS}\n\nPlease reply *YES* to confirm or reply to request a reschedule. See you tomorrow!`;
+      const reminderText = `✨ *Appointment Reminder — ${CONFIG.SALON_NAME}* ✨\n\nHi *${clientName}*,\nYour appointment for *${serviceType}* is scheduled for tomorrow (*${rowDate}*) at *${preferredTime}*.\n\n📍 *Location:* ${CONFIG.SALON_ADDRESS}\n\n👉 *Please reply YES to confirm* your slot, or reply *RESCHEDULE* if you need to adjust your time.`;
 
-      if (CONFIG.TWILIO.ACCOUNT_SID && !CONFIG.TWILIO.ACCOUNT_SID.includes("YOUR_")) {
+      if (CONFIG.TWILIO.ACCOUNT_SID) {
         try {
           sendTwilioWhatsApp(formattedPhone, reminderText);
           sheet.getRange(i + 1, 9).setValue("REMINDER_SENT");
-          Logger.log(`Reminder sent to ${clientName} (${formattedPhone})`);
+          sheet.getRange(i + 1, 9).setBackground("#fff3cd").setFontColor("#856404");
         } catch (e) {
-          Logger.log(`Failed to send reminder to row ${i + 1}: ` + e.toString());
+          Logger.log(`Failed reminder to ${clientName}: ` + e.toString());
         }
       }
     }
@@ -293,9 +327,10 @@ function sendDailyAppointmentReminders() {
 }
 
 /**
- * Helper to trigger Twilio WhatsApp REST API
+ * Twilio WhatsApp Sender
  */
 function sendTwilioWhatsApp(toWhatsApp, bodyText) {
+  if (!CONFIG.TWILIO.ACCOUNT_SID) return;
   const url = `https://api.twilio.com/2010-04-01/Accounts/${CONFIG.TWILIO.ACCOUNT_SID}/Messages.json`;
   const payload = {
     To: toWhatsApp,
@@ -303,39 +338,31 @@ function sendTwilioWhatsApp(toWhatsApp, bodyText) {
     Body: bodyText
   };
 
-  const options = {
+  UrlFetchApp.fetch(url, {
     method: "post",
     headers: {
       "Authorization": "Basic " + Utilities.base64Encode(CONFIG.TWILIO.ACCOUNT_SID + ":" + CONFIG.TWILIO.AUTH_TOKEN)
     },
     payload: payload,
     muteHttpExceptions: true
-  };
-
-  const response = UrlFetchApp.fetch(url, options);
-  Logger.log("Twilio API response: " + response.getContentText());
+  });
 }
 
 /**
- * Format phone to whatsapp:+[country_code][number]
+ * Phone Formatter helper
  */
 function formatWhatsAppNumber(phone) {
   let clean = phone.replace(/[^\d+]/g, "");
   if (!clean.startsWith("+")) {
-    if (clean.length === 10) {
-      clean = "+91" + clean; // Default country code (adjust if needed e.g. +1 for US)
-    } else {
-      clean = "+" + clean;
-    }
+    clean = clean.length === 10 ? "+91" + clean : "+" + clean;
   }
   return "whatsapp:" + clean;
 }
 
 /**
- * RUN ONCE IN APPS SCRIPT: Creates daily trigger at 9:00 AM
+ * Creates 9 AM cron trigger
  */
 function setupDailyReminderTrigger() {
-  // Clear existing triggers to avoid duplicates
   const triggers = ScriptApp.getProjectTriggers();
   for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === "sendDailyAppointmentReminders") {
@@ -343,12 +370,11 @@ function setupDailyReminderTrigger() {
     }
   }
 
-  // Create new 9 AM daily trigger
   ScriptApp.newTrigger("sendDailyAppointmentReminders")
     .timeBased()
     .everyDays(1)
     .atHour(9)
     .create();
 
-  Logger.log("Daily 9:00 AM Appointment Reminder Trigger successfully created!");
+  Logger.log("Created 9 AM Daily Reminder Trigger.");
 }
