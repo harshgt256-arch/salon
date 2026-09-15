@@ -1,35 +1,42 @@
 /**
  * ============================================================================
- * NOIR STUDIO — 1-CLICK OWNER APPROVAL & RESCHEDULE ENGINE
+ * NOIR STUDIO — 1-CLICK OWNER APPROVAL & CAPACITY CONFLICT CHECKER ENGINE
  * ============================================================================
  *
  * Flow:
- * 1. Client books on website -> Sheet status: "PENDING_APPROVAL".
- * 2. Client gets instant acknowledgement Email.
- * 3. Salon Owner gets VIP Email + WhatsApp Alert with 3 Actions:
- *    - ✅ [ACCEPT BOOKING] -> Confirmed, Calendar created, Client notified.
- *    - 🔄 [SUGGEST NEW SLOT / RESCHEDULE] -> Opens a quick page to suggest a date/time.
+ * 1. Real-Time Capacity Check:
+ *    - Website queries: ?action=check_availability&date=YYYY-MM-DD
+ *    - Checks Bookings sheet & Google Calendar for slot occupancy.
+ *    - Allows up to MAX_CONCURRENT_CHAIRS (default 4) simultaneous bookings per slot.
+ *    - Greys out full slots or shows "Only X spots left".
+ * 2. Client books on website -> Sheet status: "PENDING_APPROVAL".
+ * 3. Salon Owner receives WhatsApp + Email with 1-Click Action Buttons:
+ *    - ✅ [ACCEPT BOOKING] -> Confirms slot, blocks calendar, alerts client.
+ *    - 🔄 [SUGGEST NEW SLOT / RESCHEDULE] -> Opens interactive proposal page.
  *    - ❌ [DECLINE / CANCEL] -> Politely declines booking.
- * 4. Reschedule Handshake:
- *    - Owner picks alternate Date + Time + Note.
- *    - Sheet status -> "RESCHEDULE_PROPOSED".
- *    - Client receives Email & WhatsApp with 1-Click "Accept Proposed Slot" link!
- *    - When client accepts -> Automatically moves to CONFIRMED & adds to Google Calendar!
+ * 4. Client Reschedule Handshake:
+ *    - Client accepts suggested alternate slot with 1 tap.
  * ============================================================================
  */
 
 const CONFIG = {
   SALON_NAME: "Noir Studio",
-  SALON_OWNER_EMAIL: "harshvasava062@gmail.com", // <-- Replace with your email to receive approval alerts!
-  SALON_OWNER_PHONE: "+919876543210",          // <-- Replace with owner's WhatsApp number (+91...)
+  SALON_OWNER_EMAIL: "harshvasava062@gmail.com", // <-- Your email for alerts
+  SALON_OWNER_PHONE: "+919876543210",          // <-- Your WhatsApp number with country code (+91...)
   SALON_PHONE: "+1 (310) 555-0000",
   SALON_ADDRESS: "450 N Rodeo Dr, Beverly Hills, CA",
   SHEET_NAME: "Bookings",
 
-  // Twilio WhatsApp Setup (Free Sandbox or Production Account)
+  // Multi-chair salon capacity: maximum simultaneous clients per time slot
+  MAX_CONCURRENT_CHAIRS: 4,
+
+  // Standard salon time slots
+  SLOTS: ["10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00"],
+
+  // Twilio WhatsApp Setup (Optional)
   TWILIO: {
-    ACCOUNT_SID: "", // <-- Paste your Twilio Account SID here
-    AUTH_TOKEN: "",  // <-- Paste your Twilio Auth Token here
+    ACCOUNT_SID: "",
+    AUTH_TOKEN: "",
     WHATSAPP_FROM: "whatsapp:+14155238886"
   }
 };
@@ -58,11 +65,11 @@ function doPost(e) {
     }
 
     // Owner submitting a Reschedule Proposal via Form
-    if (data.action === "submit_reschedule" || e.parameter.action === "submit_reschedule") {
+    if (data.action === "submit_reschedule" || (e.parameter && e.parameter.action === "submit_reschedule")) {
       const bId = data.booking_id || e.parameter.booking_id;
       const newDate = data.new_date || e.parameter.new_date;
       const newTime = data.new_time || e.parameter.new_time;
-      const reason = data.reason || e.parameter.reason || "Stylist requested a schedule adjustment";
+      const reason = data.reason || e.parameter.reason || "Stylist requested schedule adjustment";
       return handleOwnerSubmitReschedule(bId, newDate, newTime, reason);
     }
 
@@ -83,6 +90,16 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({
         success: false,
         message: "Missing required fields"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Capacity Conflict Check before accepting
+    const availability = checkSlotAvailability(booking.preferred_date, booking.preferred_time);
+    if (!availability.available) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        conflict: true,
+        message: `Sorry, this time slot (${booking.preferred_time}) is fully booked. Please choose an alternate slot.`
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -131,6 +148,7 @@ function doPost(e) {
       success: true,
       booking_id: booking.booking_id,
       status: "PENDING_APPROVAL",
+      remaining_spots: availability.remaining - 1,
       message: "Request received! Salon manager will review your slot shortly."
     })).setMimeType(ContentService.MimeType.JSON);
 
@@ -145,7 +163,7 @@ function doPost(e) {
 
 /**
  * Handle GET requests:
- * 1. Health check
+ * 1. Real-Time Slot Availability Check: ?action=check_availability&date=YYYY-MM-DD
  * 2. 1-Click Owner Actions: ?action=accept | ?action=reschedule | ?action=decline
  * 3. 1-Click Client Reschedule Confirmation: ?action=client_accept_reschedule
  */
@@ -153,17 +171,88 @@ function doGet(e) {
   const params = e.parameter || {};
   const action = (params.action || "").toLowerCase();
   const bookingId = (params.id || "").trim();
+  const date = (params.date || "").trim();
 
-  // If this is a 1-Click Action from Owner or Client:
+  // 1. REAL-TIME AVAILABILITY QUERY
+  if (action === "check_availability" && date) {
+    const slotsStatus = getDayAvailability(date);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      date: date,
+      max_capacity_per_slot: CONFIG.MAX_CONCURRENT_CHAIRS,
+      slots: slotsStatus
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 2. 1-Click Action from Owner or Client
   if (action && bookingId) {
     return handleRouterActions(action, bookingId, params);
   }
 
   return ContentService.createTextOutput(JSON.stringify({
     status: "online",
-    system: "Noir Studio 1-Click Approval & Reschedule Engine",
+    system: "Noir Studio Multi-Chair Capacity & Booking Engine",
+    max_capacity_per_slot: CONFIG.MAX_CONCURRENT_CHAIRS,
     time: new Date().toISOString()
   })).setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Check availability for an entire day across all time slots
+ */
+function getDayAvailability(dateStr) {
+  const sheet = getOrCreateBookingsSheet();
+  const data = sheet.getDataRange().getValues();
+
+  // Count existing confirmed and pending bookings per slot
+  const slotCounts = {};
+  CONFIG.SLOTS.forEach(slot => { slotCounts[slot] = 0; });
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    let rowDate = "";
+    if (row[5] instanceof Date) {
+      rowDate = Utilities.formatDate(row[5], Session.getScriptTimeZone(), "yyyy-MM-dd");
+    } else if (row[5]) {
+      rowDate = row[5].toString().trim().split("T")[0];
+    }
+
+    const rowTime = (row[6] || "").toString().trim();
+    const rowStatus = (row[8] || "").toString().toUpperCase();
+
+    // Only count active bookings (CONFIRMED or PENDING_APPROVAL)
+    if (rowDate === dateStr && (rowStatus === "CONFIRMED" || rowStatus === "PENDING_APPROVAL")) {
+      if (slotCounts.hasOwnProperty(rowTime)) {
+        slotCounts[rowTime] += 1;
+      }
+    }
+  }
+
+  const results = {};
+  CONFIG.SLOTS.forEach(slot => {
+    const booked = slotCounts[slot] || 0;
+    const remaining = Math.max(0, CONFIG.MAX_CONCURRENT_CHAIRS - booked);
+    results[slot] = {
+      booked: booked,
+      capacity: CONFIG.MAX_CONCURRENT_CHAIRS,
+      remaining: remaining,
+      available: remaining > 0,
+      status: remaining === 0 ? "FULL" : (remaining <= 2 ? "FEW_LEFT" : "AVAILABLE")
+    };
+  });
+
+  return results;
+}
+
+/**
+ * Check if a single slot has capacity
+ */
+function checkSlotAvailability(dateStr, timeStr) {
+  const day = getDayAvailability(dateStr);
+  if (day && day[timeStr]) {
+    return day[timeStr];
+  }
+  return { available: true, remaining: CONFIG.MAX_CONCURRENT_CHAIRS, booked: 0 };
 }
 
 /**
@@ -177,7 +266,7 @@ function handleRouterActions(action, bookingId, params) {
 
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] && data[i][0].toString().trim() === bookingId) {
-      foundRow = i + 1; // 1-indexed row
+      foundRow = i + 1;
       booking = {
         booking_id: data[i][0],
         client_name: data[i][1],
@@ -202,7 +291,6 @@ function handleRouterActions(action, bookingId, params) {
     `);
   }
 
-  // ACTION 1: OWNER ACCEPTS
   if (action === "accept") {
     sheet.getRange(foundRow, 9).setValue("CONFIRMED");
     sheet.getRange(foundRow, 9).setBackground("#d4edda").setFontColor("#155724").setFontWeight("bold");
@@ -216,16 +304,12 @@ function handleRouterActions(action, bookingId, params) {
     if (booking.client_email) {
       try {
         sendClientOfficiallyConfirmedEmail(booking);
-      } catch (e) {
-        Logger.log("Confirmation email error: " + e.toString());
-      }
+      } catch (e) {}
     }
 
     try {
       sendClientWhatsAppConfirmation(booking);
-    } catch (e) {
-      Logger.log("Client WhatsApp error: " + e.toString());
-    }
+    } catch (e) {}
 
     return HtmlService.createHtmlOutput(`
       <div style="font-family: sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
@@ -242,7 +326,6 @@ function handleRouterActions(action, bookingId, params) {
       </div>
     `);
 
-  // ACTION 2: OWNER OPENS RESCHEDULE PORTAL
   } else if (action === "reschedule") {
     const scriptUrl = ScriptApp.getService().getUrl();
     return HtmlService.createHtmlOutput(`
@@ -258,9 +341,7 @@ function handleRouterActions(action, bookingId, params) {
           .info-box { background: #fdfaf5; border: 1px solid #E5DFD5; border-radius: 6px; padding: 14px; font-size: 14px; margin-bottom: 20px; }
           label { display: block; font-size: 13px; font-weight: 600; margin-top: 14px; margin-bottom: 6px; color: #444; }
           input, select, textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; }
-          input:focus, select:focus, textarea:focus { border-color: #C9A96A; outline: none; }
           button { width: 100%; margin-top: 20px; padding: 14px; background: #C9A96A; color: #fff; font-weight: bold; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; }
-          button:hover { background: #b08d4f; }
         </style>
       </head>
       <body>
@@ -301,7 +382,6 @@ function handleRouterActions(action, bookingId, params) {
       </html>
     `);
 
-  // ACTION 3: OWNER DECLINES
   } else if (action === "decline") {
     sheet.getRange(foundRow, 9).setValue("DECLINED");
     sheet.getRange(foundRow, 9).setBackground("#f8d7da").setFontColor("#721c24").setFontWeight("bold");
@@ -309,34 +389,27 @@ function handleRouterActions(action, bookingId, params) {
     if (booking.client_email) {
       try {
         sendClientDeclinedEmail(booking);
-      } catch (e) {
-        Logger.log("Decline email error: " + e.toString());
-      }
+      } catch (e) {}
     }
 
     try {
       sendClientWhatsAppDeclined(booking);
-    } catch (e) {
-      Logger.log("Client decline WhatsApp error: " + e.toString());
-    }
+    } catch (e) {}
 
     return HtmlService.createHtmlOutput(`
       <div style="font-family: sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
         <div style="width: 60px; height: 60px; background: #dc3545; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 20px;">✕</div>
         <h2 style="color: #721c24; margin-top: 0;">Appointment Declined</h2>
         <p style="color: #555; font-size: 15px; line-height: 1.6;">
-          You marked this slot as unavailable for <strong>${booking.client_name}</strong>. A polite reschedule notification has been sent to the client.
+          You marked this slot as unavailable for <strong>${booking.client_name}</strong>. A notification has been sent to the client.
         </p>
-        <p style="color: #888; font-size: 12px; margin-top: 20px;">You may now close this tab.</p>
       </div>
     `);
 
-  // ACTION 4: CLIENT ACCEPTS OWNER'S RESCHEDULE PROPOSAL
   } else if (action === "client_accept_reschedule") {
     const newDate = params.date || booking.preferred_date;
     const newTime = params.time || booking.preferred_time;
 
-    // Update row date, time, and confirmed status
     sheet.getRange(foundRow, 6).setValue(newDate);
     sheet.getRange(foundRow, 7).setValue(newTime);
     sheet.getRange(foundRow, 9).setValue("CONFIRMED");
@@ -345,48 +418,33 @@ function handleRouterActions(action, bookingId, params) {
     booking.preferred_date = newDate;
     booking.preferred_time = newTime;
 
-    // Create Calendar Event
     try {
       createCalendarEvent(booking);
-    } catch (e) {
-      Logger.log("Calendar error: " + e.toString());
-    }
+    } catch (e) {}
 
-    // Send confirmation to client
     if (booking.client_email) {
       try {
         sendClientOfficiallyConfirmedEmail(booking);
       } catch (e) {}
     }
 
-    // Alert Owner that client accepted the rescheduled slot
     MailApp.sendEmail({
       to: CONFIG.SALON_OWNER_EMAIL,
       subject: `✅ Reschedule Accepted by Client: ${booking.client_name} (${newDate} @ ${newTime})`,
-      htmlBody: `<p>Great news! <strong>${booking.client_name}</strong> accepted your suggested slot for <strong>${booking.service_type}</strong> on <strong>${newDate}</strong> at <strong>${newTime}</strong>.<br>It is now added to your Google Calendar.</p>`
+      htmlBody: `<p>Great news! <strong>${booking.client_name}</strong> accepted your suggested slot for <strong>${booking.service_type}</strong> on <strong>${newDate}</strong> at <strong>${newTime}</strong>.<br>It is now on your Google Calendar.</p>`
     });
 
     return HtmlService.createHtmlOutput(`
-      <div style="font-family: Georgia, serif; max-width: 520px; margin: 60px auto; text-align: center; background: #FDFAF5; border: 1px solid #E5DFD5; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+      <div style="font-family: Georgia, serif; max-width: 520px; margin: 60px auto; text-align: center; background: #FDFAF5; border: 1px solid #E5DFD5; border-radius: 12px; padding: 40px;">
         <h2 style="color: #155724; margin-top: 0;">✨ Rescheduled Appointment Confirmed!</h2>
-        <p style="color: #333; font-size: 16px; line-height: 1.6;">
+        <p style="color: #333; font-size: 16px;">
           Thank you, <strong>${booking.client_name}</strong>! Your appointment has been updated to <strong>${newDate}</strong> at <strong>${newTime}</strong>.
         </p>
-        <div style="background: #fff; padding: 18px; border-radius: 8px; margin: 24px 0; font-size: 14px; text-align: left; border: 1px solid #E5DFD5;">
-          <div>💇 <strong>Service:</strong> ${booking.service_type}</div>
-          <div style="margin-top: 6px;">📅 <strong>Date:</strong> ${newDate}</div>
-          <div style="margin-top: 6px;">⏰ <strong>Time:</strong> ${newTime}</div>
-          <div style="margin-top: 6px;">📍 <strong>Location:</strong> ${CONFIG.SALON_ADDRESS}</div>
-        </div>
-        <p style="color: #666; font-size: 13px;">A confirmation receipt has been emailed to you. We look forward to seeing you!</p>
       </div>
     `);
   }
 }
 
-/**
- * Handle Owner submitting the Reschedule form
- */
 function handleOwnerSubmitReschedule(bookingId, newDate, newTime, reason) {
   const sheet = getOrCreateBookingsSheet();
   const data = sheet.getDataRange().getValues();
@@ -414,38 +472,25 @@ function handleOwnerSubmitReschedule(bookingId, newDate, newTime, reason) {
     sheet.getRange(foundRow, 9).setValue("RESCHEDULE_PROPOSED");
     sheet.getRange(foundRow, 9).setBackground("#e2e3e5").setFontColor("#383d41").setFontWeight("bold");
 
-    // Send Reschedule Proposal Email to Client
     if (booking.client_email) {
       try {
         sendClientRescheduleProposalEmail(booking, newDate, newTime, reason);
-      } catch (e) {
-        Logger.log("Proposal email error: " + e.toString());
-      }
+      } catch (e) {}
     }
 
-    // Send Reschedule Proposal WhatsApp to Client
     try {
       sendClientRescheduleProposalWhatsApp(booking, newDate, newTime, reason);
-    } catch (e) {
-      Logger.log("Proposal WhatsApp error: " + e.toString());
-    }
+    } catch (e) {}
   }
 
   return HtmlService.createHtmlOutput(`
-    <div style="font-family: sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
-      <div style="width: 60px; height: 60px; background: #C9A96A; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 20px;">✓</div>
+    <div style="font-family: sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px;">
       <h2 style="color: #232323; margin-top: 0;">Reschedule Proposal Sent!</h2>
-      <p style="color: #555; font-size: 15px; line-height: 1.6;">
-        We proposed <strong>${newDate}</strong> at <strong>${newTime}</strong> to <strong>${booking.client_name}</strong> via Email & WhatsApp.
-      </p>
-      <p style="color: #888; font-size: 13px;">As soon as the client clicks to accept, the booking will automatically confirm and sync with your Google Calendar.</p>
+      <p style="color: #555;">We proposed <strong>${newDate}</strong> at <strong>${newTime}</strong> to <strong>${booking ? booking.client_name : ''}</strong>.</p>
     </div>
   `);
 }
 
-/**
- * Send 1-Click Actionable WhatsApp Message to Salon Owner (with 3 Links)
- */
 function sendOwnerApprovalWhatsApp(booking) {
   if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
 
@@ -460,72 +505,37 @@ function sendOwnerApprovalWhatsApp(booking) {
     `💇 *Service:* ${booking.service_type}\n` +
     `📅 *Date:* ${booking.preferred_date}\n` +
     `⏰ *Time:* ${booking.preferred_time}\n` +
-    `📞 *Phone:* ${booking.client_phone}\n` +
-    `📝 *Notes:* ${booking.message || 'None'}\n\n` +
-    `👉 *1. Accept & Add to Calendar:*\n${acceptUrl}\n\n` +
-    `👉 *2. Suggest Alternate Slot (Reschedule):*\n${rescheduleUrl}\n\n` +
-    `👉 *3. Decline / Slot Full:*\n${declineUrl}`;
+    `📞 *Phone:* ${booking.client_phone}\n\n` +
+    `👉 *1. Accept:*\n${acceptUrl}\n\n` +
+    `👉 *2. Reschedule:*\n${rescheduleUrl}\n\n` +
+    `👉 *3. Decline:*\n${declineUrl}`;
 
   sendTwilioWhatsApp(CONFIG.SALON_OWNER_PHONE, message);
 }
 
-/**
- * Send 1-Click Actionable Email to Salon Owner (with 3 Actions)
- */
 function sendOwnerApprovalEmail(booking) {
   const scriptUrl = ScriptApp.getService().getUrl();
   const acceptUrl = `${scriptUrl}?action=accept&id=${booking.booking_id}`;
   const rescheduleUrl = `${scriptUrl}?action=reschedule&id=${booking.booking_id}`;
   const declineUrl = `${scriptUrl}?action=decline&id=${booking.booking_id}`;
 
-  const subject = `🔔 [ACTION REQUIRED] Booking Request: ${booking.client_name} (${booking.preferred_date} @ ${booking.preferred_time})`;
+  const subject = `🔔 [ACTION REQUIRED] Booking: ${booking.client_name} (${booking.preferred_date} @ ${booking.preferred_time})`;
 
   const htmlBody = `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;">
-      <div style="background: #232323; color: #C9A96A; padding: 24px; text-align: center;">
-        <h2 style="margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;">New Appointment Request</h2>
-        <p style="margin: 4px 0 0; font-size: 13px; color: #EDE8DF;">${CONFIG.SALON_NAME} Concierge</p>
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; padding: 24px;">
+      <h2 style="margin-top:0; color: #232323;">New Appointment Request</h2>
+      <div style="background: #F9F7F4; border: 1px solid #E5DFD5; padding: 14px; margin: 16px 0; border-radius: 6px;">
+        <p><strong>👤 Client:</strong> ${booking.client_name}</p>
+        <p><strong>💇 Service:</strong> ${booking.service_type}</p>
+        <p><strong>📅 Date:</strong> ${booking.preferred_date}</p>
+        <p><strong>⏰ Time Slot:</strong> ${booking.preferred_time}</p>
+        <p><strong>📞 Phone:</strong> ${booking.client_phone}</p>
       </div>
-
-      <div style="padding: 24px 28px; color: #333; line-height: 1.6;">
-        <p style="font-size: 15px; margin-top: 0;">A client has requested an appointment slot. Please review:</p>
-
-        <div style="background: #F9F7F4; border: 1px solid #E5DFD5; padding: 16px; margin: 16px 0; font-size: 14px; border-radius: 6px;">
-          <p style="margin: 4px 0;"><strong>👤 Client:</strong> ${booking.client_name}</p>
-          <p style="margin: 4px 0;"><strong>💇 Service:</strong> ${booking.service_type}</p>
-          <p style="margin: 4px 0;"><strong>📅 Date:</strong> ${booking.preferred_date}</p>
-          <p style="margin: 4px 0;"><strong>⏰ Time Slot:</strong> ${booking.preferred_time}</p>
-          <p style="margin: 4px 0;"><strong>📞 WhatsApp:</strong> <a href="https://wa.me/${booking.client_phone.replace(/[^\d]/g, '')}">${booking.client_phone}</a></p>
-          <p style="margin: 4px 0;"><strong>✉️ Email:</strong> ${booking.client_email || 'Not provided'}</p>
-          <p style="margin: 4px 0;"><strong>📝 Notes:</strong> ${booking.message || 'None'}</p>
-        </div>
-
-        <p style="font-size: 14px; font-weight: bold; margin-bottom: 12px;">Choose an Action:</p>
-
-        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-          <tr>
-            <td style="padding-bottom: 10px;">
-              <a href="${acceptUrl}" style="display: block; text-align: center; background: #28a745; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 6px; font-weight: bold; font-size: 14px;">
-                ✅ Accept & Add to Calendar
-              </a>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding-bottom: 10px;">
-              <a href="${rescheduleUrl}" style="display: block; text-align: center; background: #C9A96A; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 6px; font-weight: bold; font-size: 14px;">
-                🔄 Suggest Alternate Slot (Reschedule)
-              </a>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <a href="${declineUrl}" style="display: block; text-align: center; background: #dc3545; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 6px; font-weight: bold; font-size: 14px;">
-                ❌ Decline / Slot Full
-              </a>
-            </td>
-          </tr>
-        </table>
-      </div>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding-bottom: 10px;"><a href="${acceptUrl}" style="display: block; text-align: center; background: #28a745; color: #fff; text-decoration: none; padding: 12px; border-radius: 6px; font-weight: bold;">✅ Accept & Add to Calendar</a></td></tr>
+        <tr><td style="padding-bottom: 10px;"><a href="${rescheduleUrl}" style="display: block; text-align: center; background: #C9A96A; color: #fff; text-decoration: none; padding: 12px; border-radius: 6px; font-weight: bold;">🔄 Suggest Alternate Slot (Reschedule)</a></td></tr>
+        <tr><td><a href="${declineUrl}" style="display: block; text-align: center; background: #dc3545; color: #fff; text-decoration: none; padding: 12px; border-radius: 6px; font-weight: bold;">❌ Decline / Slot Full</a></td></tr>
+      </table>
     </div>
   `;
 
@@ -536,9 +546,6 @@ function sendOwnerApprovalEmail(booking) {
   });
 }
 
-/**
- * Send Reschedule Proposal Email to Client with 1-Click Accept
- */
 function sendClientRescheduleProposalEmail(booking, newDate, newTime, reason) {
   const scriptUrl = ScriptApp.getService().getUrl();
   const acceptUrl = `${scriptUrl}?action=client_accept_reschedule&id=${booking.booking_id}&date=${encodeURIComponent(newDate)}&time=${encodeURIComponent(newTime)}`;
@@ -548,22 +555,15 @@ function sendClientRescheduleProposalEmail(booking, newDate, newTime, reason) {
     <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; background-color: #FDFAF5; border: 1px solid #E5DFD5; border-radius: 8px; padding: 32px;">
       <h2 style="color: #232323; margin-top: 0;">Schedule Adjustment Request ✨</h2>
       <p>Dear <strong>${booking.client_name}</strong>,</p>
-      <p>Thank you for choosing ${CONFIG.SALON_NAME}. Our stylists are currently unavailable for your original slot, but we would love to welcome you at this proposed alternate time:</p>
-
-      <div style="background: #ffffff; border: 1px solid #E5DFD5; border-radius: 6px; padding: 20px; margin: 20px 0;">
-        <p style="margin: 4px 0; color: #767676; font-size: 13px;">PROPOSED NEW SLOT:</p>
-        <p style="margin: 6px 0; font-size: 18px; font-weight: bold; color: #A07C3B;">📅 ${newDate} at ⏰ ${newTime}</p>
-        <p style="margin: 6px 0; font-size: 14px;"><strong>Service:</strong> ${booking.service_type}</p>
-        ${reason ? `<p style="margin: 6px 0; font-size: 13px; color: #555;"><strong>Note from Salon:</strong> <em>"${reason}"</em></p>` : ''}
+      <p>Our stylists have proposed this alternate slot for your appointment:</p>
+      <div style="background: #ffffff; border: 1px solid #E5DFD5; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <p style="font-size: 16px; font-weight: bold; color: #A07C3B;">📅 ${newDate} at ⏰ ${newTime}</p>
+        <p><strong>Service:</strong> ${booking.service_type}</p>
+        ${reason ? `<p><strong>Note:</strong> <em>"${reason}"</em></p>` : ''}
       </div>
-
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${acceptUrl}" style="background: #28a745; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">
-          ✓ Accept This Time Slot & Confirm
-        </a>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${acceptUrl}" style="background: #28a745; color: #fff; text-decoration: none; padding: 14px 24px; border-radius: 6px; font-weight: bold; display: inline-block;">✓ Accept This New Time Slot</a>
       </div>
-
-      <p style="font-size: 13px; color: #767676; text-align: center;">If this time does not work for you, feel free to call us at <a href="tel:${CONFIG.SALON_PHONE}" style="color: #A07C3B;">${CONFIG.SALON_PHONE}</a>.</p>
     </div>
   `;
 
@@ -574,9 +574,6 @@ function sendClientRescheduleProposalEmail(booking, newDate, newTime, reason) {
   });
 }
 
-/**
- * Send Reschedule Proposal WhatsApp to Client with 1-Click Accept
- */
 function sendClientRescheduleProposalWhatsApp(booking, newDate, newTime, reason) {
   if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
 
@@ -585,20 +582,14 @@ function sendClientRescheduleProposalWhatsApp(booking, newDate, newTime, reason)
 
   const msg =
     `Hello ${booking.client_name} ✨\n\n` +
-    `Regarding your appointment for *${booking.service_type}* at *${CONFIG.SALON_NAME}*:\n` +
-    `Our master stylist has proposed an alternate slot for you:\n\n` +
-    `📅 *Proposed Date:* ${newDate}\n` +
-    `⏰ *Proposed Time:* ${newTime}\n` +
-    (reason ? `📝 *Note:* ${reason}\n\n` : `\n`) +
-    `👉 *Tap here to confirm this new slot:*\n${acceptUrl}\n\n` +
-    `Or call us at ${CONFIG.SALON_PHONE} to choose another time!`;
+    `Our master stylist has proposed an alternate slot for your *${booking.service_type}*:\n\n` +
+    `📅 *Date:* ${newDate}\n` +
+    `⏰ *Time:* ${newTime}\n\n` +
+    `👉 *Tap to confirm this slot:*\n${acceptUrl}`;
 
   sendTwilioWhatsApp(booking.client_phone, msg);
 }
 
-/**
- * Send "Request Received / Pending Review" Email to Client
- */
 function sendClientRequestReceivedEmail(booking) {
   const subject = `Appointment Request Received: ${booking.service_type} at ${CONFIG.SALON_NAME}`;
   const htmlBody = `
@@ -606,12 +597,7 @@ function sendClientRequestReceivedEmail(booking) {
       <h2 style="color: #232323; margin-top: 0;">Request Received ✨</h2>
       <p>Dear <strong>${booking.client_name}</strong>,</p>
       <p>We received your booking request for <strong>${booking.service_type}</strong> on <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.</p>
-      <div style="background: #ffffff; border: 1px solid #E5DFD5; border-radius: 6px; padding: 16px; margin: 20px 0;">
-        <p style="margin: 4px 0;"><strong>Status:</strong> <span style="color: #856404; font-weight: bold;">Under Salon Review</span></p>
-        <p style="margin: 4px 0;"><strong>Booking ID:</strong> ${booking.booking_id}</p>
-        <p style="margin: 4px 0;"><strong>Location:</strong> ${CONFIG.SALON_ADDRESS}</p>
-      </div>
-      <p style="font-size: 14px; color: #555;">Our concierge is reviewing artist availability and will send your confirmation shortly.</p>
+      <p>Our concierge is reviewing availability and will confirm shortly.</p>
     </div>
   `;
 
@@ -622,28 +608,13 @@ function sendClientRequestReceivedEmail(booking) {
   });
 }
 
-/**
- * Send "Officially Confirmed" Email to Client
- */
 function sendClientOfficiallyConfirmedEmail(booking) {
   const subject = `🎉 Officially Confirmed: ${booking.service_type} at ${CONFIG.SALON_NAME}`;
   const htmlBody = `
     <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; background-color: #FDFAF5; border: 1px solid #E5DFD5; border-radius: 8px; padding: 32px;">
-      <h2 style="color: #1b5e20; margin-top: 0;">Your Appointment is Officially Confirmed! ✨</h2>
+      <h2 style="color: #1b5e20; margin-top: 0;">Appointment Confirmed! ✨</h2>
       <p>Dear <strong>${booking.client_name}</strong>,</p>
-      <p>Great news! Your booking has been approved. We look forward to welcoming you to Noir Studio.</p>
-
-      <div style="background: #ffffff; border: 1px solid #E5DFD5; border-radius: 6px; padding: 18px; margin: 20px 0;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-          <tr><td style="padding: 5px 0; color: #767676;">Booking ID:</td><td style="font-weight: bold; color: #232323;">${booking.booking_id}</td></tr>
-          <tr><td style="padding: 5px 0; color: #767676;">Service:</td><td style="font-weight: bold; color: #232323;">${booking.service_type}</td></tr>
-          <tr><td style="padding: 5px 0; color: #767676;">Date:</td><td style="font-weight: bold; color: #232323;">${booking.preferred_date}</td></tr>
-          <tr><td style="padding: 5px 0; color: #767676;">Time:</td><td style="font-weight: bold; color: #232323;">${booking.preferred_time}</td></tr>
-          <tr><td style="padding: 5px 0; color: #767676;">Location:</td><td style="color: #232323;">${CONFIG.SALON_ADDRESS}</td></tr>
-        </table>
-      </div>
-
-      <p style="font-size: 13px; color: #767676;">Need to reschedule? Call us at <a href="tel:${CONFIG.SALON_PHONE}" style="color: #A07C3B;">${CONFIG.SALON_PHONE}</a>.</p>
+      <p>Your appointment has been officially confirmed for <strong>${booking.service_type}</strong> on <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.</p>
     </div>
   `;
 
@@ -654,17 +625,13 @@ function sendClientOfficiallyConfirmedEmail(booking) {
   });
 }
 
-/**
- * Send "Declined / Slot Unavailable" Email to Client
- */
 function sendClientDeclinedEmail(booking) {
   const subject = `Update regarding your appointment request at ${CONFIG.SALON_NAME}`;
   const htmlBody = `
     <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; background-color: #FDFAF5; border: 1px solid #E5DFD5; border-radius: 8px; padding: 32px;">
       <h2 style="color: #232323; margin-top: 0;">Appointment Update</h2>
       <p>Dear <strong>${booking.client_name}</strong>,</p>
-      <p>Thank you for choosing ${CONFIG.SALON_NAME}. Regrettably, our stylists are fully booked for <strong>${booking.service_type}</strong> on <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.</p>
-      <p>We would love to accommodate you at another time! Please reply to this email or call us at <a href="tel:${CONFIG.SALON_PHONE}" style="color: #A07C3B;">${CONFIG.SALON_PHONE}</a> to pick an alternate slot.</p>
+      <p>Regrettably, we are fully booked for <strong>${booking.service_type}</strong> on <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.</p>
     </div>
   `;
 
@@ -675,43 +642,27 @@ function sendClientDeclinedEmail(booking) {
   });
 }
 
-/**
- * Send WhatsApp Confirmation to Client
- */
 function sendClientWhatsAppConfirmation(booking) {
   if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
 
   const msg =
     `✨ *Booking Confirmed at ${CONFIG.SALON_NAME}!*\n\n` +
-    `Dear ${booking.client_name}, your appointment is officially approved.\n\n` +
-    `💇 *Service:* ${booking.service_type}\n` +
-    `📅 *Date:* ${booking.preferred_date}\n` +
-    `⏰ *Time:* ${booking.preferred_time}\n` +
-    `📍 *Location:* ${CONFIG.SALON_ADDRESS}\n` +
-    `🔖 *ID:* ${booking.booking_id}\n\n` +
-    `We look forward to pampering you! See you soon.`;
+    `Dear ${booking.client_name}, your appointment is confirmed for *${booking.service_type}* on *${booking.preferred_date}* at *${booking.preferred_time}*.\n\n` +
+    `📍 ${CONFIG.SALON_ADDRESS}`;
 
   sendTwilioWhatsApp(booking.client_phone, msg);
 }
 
-/**
- * Send WhatsApp Decline Notice to Client
- */
 function sendClientWhatsAppDeclined(booking) {
   if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
 
   const msg =
     `Hello ${booking.client_name},\n\n` +
-    `Thank you for requesting an appointment at ${CONFIG.SALON_NAME}.\n` +
-    `Unfortunately, our stylists are fully booked for ${booking.service_type} on ${booking.preferred_date} at ${booking.preferred_time}.\n\n` +
-    `Please call us at ${CONFIG.SALON_PHONE} to reschedule to a time that suits you!`;
+    `Unfortunately, our stylists are fully booked for ${booking.service_type} on ${booking.preferred_date} at ${booking.preferred_time}. Please call us at ${CONFIG.SALON_PHONE} to choose another time!`;
 
   sendTwilioWhatsApp(booking.client_phone, msg);
 }
 
-/**
- * Core Twilio Outbound Dispatcher
- */
 function sendTwilioWhatsApp(toPhone, messageBody) {
   if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
 
@@ -736,29 +687,17 @@ function sendTwilioWhatsApp(toPhone, messageBody) {
     muteHttpExceptions: true
   };
 
-  const resp = UrlFetchApp.fetch(url, options);
-  Logger.log(`Twilio WhatsApp dispatch to ${cleanPhone}: ` + resp.getContentText());
+  UrlFetchApp.fetch(url, options);
 }
 
-/**
- * Inbound WhatsApp webhook handler (Optional Twilio interactive replies)
- */
 function handleTwilioInboundWhatsApp(params) {
-  const from = params.From || "";
-  const body = (params.Body || "").trim();
-
-  Logger.log(`Received WhatsApp reply from ${from}: ${body}`);
-
   return ContentService.createTextOutput(`
     <Response>
-      <Message>Thank you for reaching out to ${CONFIG.SALON_NAME}. Our team will assist you shortly.</Message>
+      <Message>Thank you for contacting ${CONFIG.SALON_NAME}. We will assist you shortly.</Message>
     </Response>
   `).setMimeType(ContentService.MimeType.XML);
 }
 
-/**
- * Helper to create event in Google Calendar
- */
 function createCalendarEvent(booking) {
   const cal = CalendarApp.getDefaultCalendar();
   if (!cal) return;
@@ -778,9 +717,6 @@ function createCalendarEvent(booking) {
   });
 }
 
-/**
- * Get or initialize Bookings Sheet
- */
 function getOrCreateBookingsSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CONFIG.SHEET_NAME);

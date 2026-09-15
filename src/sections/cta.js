@@ -70,17 +70,19 @@ export function initCta() {
               <input type="date" id="booking-date" name="preferred_date" required>
             </div>
             <div class="form-group">
-              <label class="form-label" for="booking-time">Preferred Time *</label>
+              <label class="form-label" for="booking-time">
+                Preferred Time * <span id="slot-loading-indicator" style="display:none; font-size: 10px; color: var(--gold); text-transform: none;">(Checking seats...)</span>
+              </label>
               <div class="select-wrapper">
                 <select id="booking-time" name="preferred_time" required>
                   <option value="">Select Time Slot</option>
-                  <option value="10:00">10:00 AM</option>
-                  <option value="11:30">11:30 AM</option>
-                  <option value="13:00">01:00 PM</option>
-                  <option value="14:30">02:30 PM</option>
-                  <option value="16:00">04:00 PM</option>
-                  <option value="17:30">05:30 PM</option>
-                  <option value="19:00">07:00 PM</option>
+                  <option value="10:00" data-base="10:00 AM">10:00 AM</option>
+                  <option value="11:30" data-base="11:30 AM">11:30 AM</option>
+                  <option value="13:00" data-base="01:00 PM">01:00 PM</option>
+                  <option value="14:30" data-base="02:30 PM">02:30 PM</option>
+                  <option value="16:00" data-base="04:00 PM">04:00 PM</option>
+                  <option value="17:30" data-base="05:30 PM">05:30 PM</option>
+                  <option value="19:00" data-base="07:00 PM">07:00 PM</option>
                 </select>
               </div>
             </div>
@@ -129,15 +131,17 @@ export function initCta() {
   const modalContent = container.querySelector('.modal-content');
   const serviceSelect = document.getElementById('modal-service-select');
   const notesTextarea = document.getElementById('modal-notes');
+  const dateInput = document.getElementById('booking-date');
+  const timeSelect = document.getElementById('booking-time');
+  const slotLoadingIndicator = document.getElementById('slot-loading-indicator');
 
   function openModal(preset = {}) {
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
 
-    // Concierge deep-linking preset
     if (preset.service && serviceSelect) {
-      const match = Array.from(serviceSelect.options).find(opt => 
-        opt.value.toLowerCase().includes(preset.service.toLowerCase()) || 
+      const match = Array.from(serviceSelect.options).find(opt =>
+        opt.value.toLowerCase().includes(preset.service.toLowerCase()) ||
         preset.service.toLowerCase().includes(opt.value.toLowerCase())
       );
       if (match) serviceSelect.value = match.value;
@@ -145,9 +149,8 @@ export function initCta() {
     if (preset.stylist && notesTextarea) {
       notesTextarea.value = `Preferred Artist: ${preset.stylist}\n`;
     }
-    
-    // Animate in
-    gsap.fromTo(modalContent, 
+
+    gsap.fromTo(modalContent,
       { y: 30, opacity: 0, scale: 0.98 },
       { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: 'power3.out' }
     );
@@ -155,6 +158,11 @@ export function initCta() {
       { opacity: 0 },
       { opacity: 1, duration: 0.4, ease: 'power2.out' }
     );
+
+    // If date is already chosen, refresh slot availability
+    if (dateInput && dateInput.value) {
+      fetchSlotAvailability(dateInput.value);
+    }
   }
 
   function closeModal() {
@@ -167,6 +175,58 @@ export function initCta() {
         modal.classList.remove('active');
         document.body.style.overflow = '';
       }
+    });
+  }
+
+  // Real-time capacity check when date changes
+  async function fetchSlotAvailability(selectedDate) {
+    if (!selectedDate || !timeSelect) return;
+    const webhookUrl = window.SALON_BOOKING_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycby740HbVN2Slt9V3jfqWv-qImexXuAjhw8mOXMJIO-Bm0BFvqgqIQd7bl3unq5sAj21PQ/exec';
+
+    if (slotLoadingIndicator) slotLoadingIndicator.style.display = 'inline';
+
+    try {
+      const resp = await fetch(`${webhookUrl}?action=check_availability&date=${encodeURIComponent(selectedDate)}`);
+      const data = await resp.json();
+
+      if (data && data.slots) {
+        Array.from(timeSelect.options).forEach(opt => {
+          if (!opt.value) return; // Skip placeholder
+          const baseLabel = opt.dataset.base || opt.textContent.split(' (')[0];
+          const slotData = data.slots[opt.value];
+
+          if (slotData) {
+            if (slotData.remaining === 0) {
+              opt.disabled = true;
+              opt.textContent = `${baseLabel} (Full / Sold Out)`;
+            } else if (slotData.remaining === 1) {
+              opt.disabled = false;
+              opt.textContent = `${baseLabel} — Only 1 spot left! 🔥`;
+            } else if (slotData.remaining <= 2) {
+              opt.disabled = false;
+              opt.textContent = `${baseLabel} (${slotData.remaining} spots left)`;
+            } else {
+              opt.disabled = false;
+              opt.textContent = `${baseLabel} (${slotData.remaining} spots free)`;
+            }
+          } else {
+            opt.disabled = false;
+            opt.textContent = baseLabel;
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Live availability fetch notice:', err);
+    } finally {
+      if (slotLoadingIndicator) slotLoadingIndicator.style.display = 'none';
+    }
+  }
+
+  if (dateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.min = today;
+    dateInput.addEventListener('change', (e) => {
+      fetchSlotAvailability(e.target.value);
     });
   }
 
@@ -195,17 +255,10 @@ export function initCta() {
     }
   });
 
-  // Handle Form Submission & n8n / Webhook Automation
+  // Handle Form Submission & Webhook Automation
   const bookingForm = document.getElementById('salon-booking-form');
   const statusBox = document.getElementById('booking-status-message');
   const submitBtn = document.getElementById('booking-submit-btn');
-  const dateInput = document.getElementById('booking-date');
-
-  // Default min date to today
-  if (dateInput) {
-    const today = new Date().toISOString().split('T')[0];
-    dateInput.min = today;
-  }
 
   if (bookingForm) {
     bookingForm.addEventListener('submit', async (e) => {
@@ -214,7 +267,6 @@ export function initCta() {
       const btnText = submitBtn.querySelector('.btn-text');
       const btnLoading = submitBtn.querySelector('.btn-loading');
 
-      // Form values
       const formData = new FormData(bookingForm);
       const bookingPayload = {
         name: formData.get('name')?.toString().trim(),
@@ -226,7 +278,6 @@ export function initCta() {
         message: formData.get('message')?.toString().trim() || ''
       };
 
-      // UI Loading State
       submitBtn.disabled = true;
       if (btnText) btnText.style.display = 'none';
       if (btnLoading) btnLoading.style.display = 'inline-block';
@@ -235,11 +286,9 @@ export function initCta() {
         statusBox.className = 'booking-status';
       }
 
-      // Webhook URL (reads from config or fallback to window.SALON_BOOKING_WEBHOOK_URL)
       const webhookUrl = window.SALON_BOOKING_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycby740HbVN2Slt9V3jfqWv-qImexXuAjhw8mOXMJIO-Bm0BFvqgqIQd7bl3unq5sAj21PQ/exec';
 
       try {
-        // Use text/plain to avoid CORS preflight options blocking on Google Apps Script
         const response = await fetch(webhookUrl, {
           method: 'POST',
           headers: {
@@ -255,13 +304,27 @@ export function initCta() {
           result = { success: true };
         }
 
+        if (result.conflict) {
+          statusBox.innerHTML = `
+            <div style="color: #721c24; background: #f8d7da; padding: 12px; border-radius: 6px; border: 1px solid #f5c6cb;">
+              <strong>Slot Unavailable:</strong> ${result.message}
+            </div>
+          `;
+          statusBox.className = 'booking-status';
+          statusBox.style.display = 'block';
+          if (dateInput && dateInput.value) {
+            fetchSlotAvailability(dateInput.value);
+          }
+          return;
+        }
+
         if (response.ok || response.type === 'opaque' || result.success !== false) {
           statusBox.innerHTML = `
             <div class="booking-success-card">
               <span class="status-icon">✓</span>
-              <h4>Reservation Confirmed!</h4>
-              <p>Thank you, <strong>${bookingPayload.name}</strong>. We've reserved your slot for <strong>${bookingPayload.preferred_date}</strong> at <strong>${bookingPayload.preferred_time}</strong>.</p>
-              <small>A confirmation & reminder will be sent to <em>${bookingPayload.phone}</em>.</small>
+              <h4>Reservation Received!</h4>
+              <p>Thank you, <strong>${bookingPayload.name}</strong>. We've received your request for <strong>${bookingPayload.preferred_date}</strong> at <strong>${bookingPayload.preferred_time}</strong>.</p>
+              <small>Salon concierge is reviewing artist availability. A confirmation will be sent to <em>${bookingPayload.phone}</em>.</small>
             </div>
           `;
           statusBox.className = 'booking-status status-success';
@@ -271,7 +334,7 @@ export function initCta() {
           setTimeout(() => {
             closeModal();
             statusBox.style.display = 'none';
-          }, 4000);
+          }, 4500);
         } else {
           throw new Error(result.message || 'Failed to submit booking');
         }
@@ -281,7 +344,7 @@ export function initCta() {
           <div class="booking-success-card">
             <span class="status-icon">✓</span>
             <h4>Booking Received!</h4>
-            <p>Thank you, <strong>${bookingPayload.name}</strong>. Your appointment for <strong>${bookingPayload.service_type}</strong> on <strong>${bookingPayload.preferred_date}</strong> at <strong>${bookingPayload.preferred_time}</strong> has been received.</p>
+            <p>Thank you, <strong>${bookingPayload.name}</strong>. Your appointment request has been received.</p>
             <small>We will contact you at <em>${bookingPayload.phone}</em> shortly.</small>
           </div>
         `;
