@@ -35,8 +35,14 @@ const CONFIG = {
 
   // CallMeBot Free WhatsApp Setup
   CALLMEBOT: {
-    API_KEY: "", // <-- Paste your CallMeBot API Key here once received
+    API_KEY: "", // <-- Paste your CallMeBot WhatsApp API Key here once received
     PHONE: "+919876543210" // <-- Your WhatsApp phone number with country code
+  },
+
+  // Telegram Instant Alerts (Free & Instant)
+  TELEGRAM: {
+    BOT_TOKEN: "", // <-- Optional: If creating custom bot, or leave blank to use CallMeBot Telegram
+    CHAT_ID: ""    // <-- Your Telegram username without @ or user ID
   },
 
   // Twilio WhatsApp Setup (Optional backup)
@@ -517,14 +523,47 @@ function sendOwnerApprovalWhatsApp(booking) {
     `👉 *2. Suggest Alternate Slot:*\n${rescheduleUrl}\n\n` +
     `👉 *3. Decline:*\n${declineUrl}`;
 
-  // 1. Send via CallMeBot (Free)
+  // 1. Send via CallMeBot WhatsApp (Free)
   if (CONFIG.CALLMEBOT && CONFIG.CALLMEBOT.API_KEY) {
     sendCallMeBotWhatsApp(CONFIG.CALLMEBOT.PHONE, message, CONFIG.CALLMEBOT.API_KEY);
   }
 
-  // 2. Send via Twilio (if configured)
+  // 2. Send via Telegram (Free & Instant)
+  if (CONFIG.TELEGRAM && CONFIG.TELEGRAM.CHAT_ID) {
+    sendTelegramAlert(CONFIG.TELEGRAM, message);
+  }
+
+  // 3. Send via Twilio (if configured)
   if (CONFIG.TWILIO && CONFIG.TWILIO.ACCOUNT_SID) {
     sendTwilioWhatsApp(CONFIG.SALON_OWNER_PHONE, message);
+  }
+}
+
+function sendTelegramAlert(telegramConfig, messageText) {
+  try {
+    if (telegramConfig.BOT_TOKEN && telegramConfig.CHAT_ID) {
+      // Direct custom Telegram bot API
+      const url = `https://api.telegram.org/bot${telegramConfig.BOT_TOKEN}/sendMessage`;
+      const payload = {
+        chat_id: telegramConfig.CHAT_ID,
+        text: messageText,
+        parse_mode: 'Markdown'
+      };
+      UrlFetchApp.fetch(url, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      });
+    } else if (telegramConfig.CHAT_ID) {
+      // CallMeBot Free Telegram gateway
+      const user = telegramConfig.CHAT_ID.replace('@', '');
+      const encoded = encodeURIComponent(messageText);
+      const url = `https://api.callmebot.com/text.php?user=${encodeURIComponent(user)}&text=${encoded}`;
+      UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    }
+  } catch (e) {
+    Logger.log("Telegram alert error: " + e.toString());
   }
 }
 
