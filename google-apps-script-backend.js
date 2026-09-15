@@ -291,6 +291,9 @@ function handleRouterActions(action, bookingId, params) {
     `);
   }
 
+  const displayDate = formatDateForDisplay(booking.preferred_date);
+  const displayTime = formatTimeForDisplay(booking.preferred_time);
+
   if (action === "accept") {
     sheet.getRange(foundRow, 9).setValue("CONFIRMED");
     sheet.getRange(foundRow, 9).setBackground("#d4edda").setFontColor("#155724").setFontWeight("bold");
@@ -316,7 +319,7 @@ function handleRouterActions(action, bookingId, params) {
         <div style="width: 60px; height: 60px; background: #28a745; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 30px; margin-bottom: 20px;">✓</div>
         <h2 style="color: #155724; margin-top: 0;">Appointment Confirmed!</h2>
         <p style="color: #555; font-size: 15px; line-height: 1.6;">
-          You approved <strong>${booking.client_name}</strong> for <strong>${booking.service_type}</strong> on <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.
+          You approved <strong>${booking.client_name}</strong> for <strong>${booking.service_type}</strong> on <strong>${displayDate}</strong> at <strong>${displayTime}</strong>.
         </p>
         <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 14px; text-align: left;">
           <div>📅 <strong>Google Calendar:</strong> Event automatically added</div>
@@ -698,14 +701,53 @@ function handleTwilioInboundWhatsApp(params) {
   `).setMimeType(ContentService.MimeType.XML);
 }
 
+function formatDateForDisplay(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  const s = val.toString().trim();
+  if (s.includes("T")) return s.split("T")[0];
+  return s;
+}
+
+function formatTimeForDisplay(val) {
+  if (!val) return "10:00";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "HH:mm");
+  }
+  const s = val.toString().trim();
+  const match = s.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const hours = match[1].padStart(2, '0');
+    const mins = match[2];
+    return `${hours}:${mins}`;
+  }
+  return s;
+}
+
 function createCalendarEvent(booking) {
   const cal = CalendarApp.getDefaultCalendar();
   if (!cal) return;
 
-  const parts = booking.preferred_date.split("-").map(Number);
-  const timeParts = (booking.preferred_time || "10:00").split(":").map(Number);
+  const dateStr = formatDateForDisplay(booking.preferred_date);
+  const timeStr = formatTimeForDisplay(booking.preferred_time);
 
-  const startTime = new Date(parts[0], parts[1] - 1, parts[2], timeParts[0], timeParts[1], 0);
+  const parts = dateStr.split("-").map(Number);
+  const timeParts = timeStr.split(":").map(Number);
+
+  if (parts.length < 3 || isNaN(parts[0])) {
+    Logger.log("Invalid date string for calendar: " + dateStr);
+    return;
+  }
+
+  const year = parts[0];
+  const month = parts[1] - 1;
+  const day = parts[2];
+  const hour = isNaN(timeParts[0]) ? 10 : timeParts[0];
+  const minute = isNaN(timeParts[1]) ? 0 : timeParts[1];
+
+  const startTime = new Date(year, month, day, hour, minute, 0);
   const endTime = new Date(startTime.getTime() + (90 * 60 * 1000));
 
   const title = `✨ ${CONFIG.SALON_NAME}: ${booking.service_type} - ${booking.client_name}`;
