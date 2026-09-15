@@ -33,7 +33,13 @@ const CONFIG = {
   // Standard salon time slots
   SLOTS: ["10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00"],
 
-  // Twilio WhatsApp Setup (Optional)
+  // CallMeBot Free WhatsApp Setup
+  CALLMEBOT: {
+    API_KEY: "", // <-- Paste your CallMeBot API Key here once received
+    PHONE: "+919876543210" // <-- Your WhatsApp phone number with country code
+  },
+
+  // Twilio WhatsApp Setup (Optional backup)
   TWILIO: {
     ACCOUNT_SID: "",
     AUTH_TOKEN: "",
@@ -495,25 +501,46 @@ function handleOwnerSubmitReschedule(bookingId, newDate, newTime, reason) {
 }
 
 function sendOwnerApprovalWhatsApp(booking) {
-  if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
-
   const scriptUrl = ScriptApp.getService().getUrl();
   const acceptUrl = `${scriptUrl}?action=accept&id=${booking.booking_id}`;
   const rescheduleUrl = `${scriptUrl}?action=reschedule&id=${booking.booking_id}`;
   const declineUrl = `${scriptUrl}?action=decline&id=${booking.booking_id}`;
 
   const message =
-    `🔔 *NEW BOOKING REQUEST*\n\n` +
+    `🔔 *NEW NOIR STUDIO BOOKING*\n\n` +
     `👤 *Client:* ${booking.client_name}\n` +
     `💇 *Service:* ${booking.service_type}\n` +
     `📅 *Date:* ${booking.preferred_date}\n` +
     `⏰ *Time:* ${booking.preferred_time}\n` +
     `📞 *Phone:* ${booking.client_phone}\n\n` +
-    `👉 *1. Accept:*\n${acceptUrl}\n\n` +
-    `👉 *2. Reschedule:*\n${rescheduleUrl}\n\n` +
+    `👉 *1. Accept & Add to Calendar:*\n${acceptUrl}\n\n` +
+    `👉 *2. Suggest Alternate Slot:*\n${rescheduleUrl}\n\n` +
     `👉 *3. Decline:*\n${declineUrl}`;
 
-  sendTwilioWhatsApp(CONFIG.SALON_OWNER_PHONE, message);
+  // 1. Send via CallMeBot (Free)
+  if (CONFIG.CALLMEBOT && CONFIG.CALLMEBOT.API_KEY) {
+    sendCallMeBotWhatsApp(CONFIG.CALLMEBOT.PHONE, message, CONFIG.CALLMEBOT.API_KEY);
+  }
+
+  // 2. Send via Twilio (if configured)
+  if (CONFIG.TWILIO && CONFIG.TWILIO.ACCOUNT_SID) {
+    sendTwilioWhatsApp(CONFIG.SALON_OWNER_PHONE, message);
+  }
+}
+
+function sendCallMeBotWhatsApp(phone, messageText, apiKey) {
+  try {
+    let cleanPhone = phone.toString().replace(/[^\d+]/g, '');
+    if (!cleanPhone.startsWith('+')) {
+      cleanPhone = '+' + cleanPhone;
+    }
+    const encodedText = encodeURIComponent(messageText);
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(cleanPhone)}&text=${encodedText}&apikey=${encodeURIComponent(apiKey)}`;
+
+    UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  } catch (e) {
+    Logger.log("CallMeBot WhatsApp error: " + e.toString());
+  }
 }
 
 function sendOwnerApprovalEmail(booking) {
