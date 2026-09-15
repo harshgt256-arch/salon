@@ -255,7 +255,7 @@ function handleRouterActions(action, bookingId, params) {
           .container { max-width: 480px; margin: 20px auto; background: #fff; border-radius: 12px; padding: 30px; border: 1px solid #E5DFD5; box-shadow: 0 4px 20px rgba(0,0,0,0.04); }
           .badge { display: inline-block; background: #fff3cd; color: #856404; font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 20px; margin-bottom: 12px; }
           h2 { margin-top: 0; color: #232323; font-size: 22px; }
-          .info-box { background: #fdfaf5; border-left: 3px solid #C9A96A; padding: 12px; font-size: 14px; margin-bottom: 20px; }
+          .info-box { background: #fdfaf5; border: 1px solid #E5DFD5; border-radius: 6px; padding: 14px; font-size: 14px; margin-bottom: 20px; }
           label { display: block; font-size: 13px; font-weight: 600; margin-top: 14px; margin-bottom: 6px; color: #444; }
           input, select, textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; }
           input:focus, select:focus, textarea:focus { border-color: #C9A96A; outline: none; }
