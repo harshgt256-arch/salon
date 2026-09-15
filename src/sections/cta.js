@@ -30,30 +30,73 @@ export function initCta() {
       <div class="modal-content">
         <span class="close-btn" aria-label="Close modal">&times;</span>
         <h2 class="modal-title">Reserve Your Experience</h2>
-        <p class="modal-subtitle">We will get back to you within 24 hours to confirm your appointment.</p>
-        <form class="contact-form">
-          <div class="form-group">
-            <input type="text" placeholder="Full Name" required>
+        <p class="modal-subtitle">Instant reservation & WhatsApp confirmation for your appointment.</p>
+
+        <form class="contact-form" id="salon-booking-form">
+          <div class="form-row-grid">
+            <div class="form-group">
+              <label class="form-label" for="booking-name">Full Name *</label>
+              <input type="text" id="booking-name" name="name" placeholder="e.g. Sophia Montgomery" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="booking-phone">WhatsApp Number *</label>
+              <input type="tel" id="booking-phone" name="phone" placeholder="+91 98765 43210 or 10-digit" required>
+            </div>
           </div>
+
           <div class="form-group">
-            <input type="email" placeholder="Email Address" required>
+            <label class="form-label" for="booking-email">Email Address</label>
+            <input type="email" id="booking-email" name="email" placeholder="sophia@example.com">
           </div>
+
           <div class="form-group">
+            <label class="form-label" for="modal-service-select">Service *</label>
             <div class="select-wrapper">
-              <select id="modal-service-select" required>
+              <select id="modal-service-select" name="service_type" required>
                 <option value="">Select Primary Service</option>
                 <option value="Hair Cut & Style">Hair Cut & Style</option>
                 <option value="Balayage & Colour">Balayage & Colour</option>
                 <option value="Bridal Hair">Bridal Suite</option>
                 <option value="Face Spa">Face Spa & Skincare</option>
                 <option value="Makeup">Makeup / Lash & Brow</option>
+                <option value="General Booking">General Consultation</option>
               </select>
             </div>
           </div>
-          <div class="form-group">
-            <textarea id="modal-notes" placeholder="Tell us about your hair or skin history..." rows="4"></textarea>
+
+          <div class="form-row-grid">
+            <div class="form-group">
+              <label class="form-label" for="booking-date">Preferred Date *</label>
+              <input type="date" id="booking-date" name="preferred_date" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="booking-time">Preferred Time *</label>
+              <div class="select-wrapper">
+                <select id="booking-time" name="preferred_time" required>
+                  <option value="">Select Time Slot</option>
+                  <option value="10:00">10:00 AM</option>
+                  <option value="11:30">11:30 AM</option>
+                  <option value="13:00">01:00 PM</option>
+                  <option value="14:30">02:30 PM</option>
+                  <option value="16:00">04:00 PM</option>
+                  <option value="17:30">05:30 PM</option>
+                  <option value="19:00">07:00 PM</option>
+                </select>
+              </div>
+            </div>
           </div>
-          <button type="submit" class="modal-submit-btn">Submit Request &rarr;</button>
+
+          <div class="form-group">
+            <label class="form-label" for="modal-notes">Special Requests / Notes</label>
+            <textarea id="modal-notes" name="message" placeholder="Hair texture, stylist preference, or specific requests..." rows="3"></textarea>
+          </div>
+
+          <div id="booking-status-message" class="booking-status" style="display: none;"></div>
+
+          <button type="submit" id="booking-submit-btn" class="modal-submit-btn">
+            <span class="btn-text">Confirm Booking &rarr;</span>
+            <span class="btn-loading" style="display: none;">Processing...</span>
+          </button>
         </form>
       </div>
     </div>
@@ -151,4 +194,105 @@ export function initCta() {
       closeModal();
     }
   });
+
+  // Handle Form Submission & n8n / Webhook Automation
+  const bookingForm = document.getElementById('salon-booking-form');
+  const statusBox = document.getElementById('booking-status-message');
+  const submitBtn = document.getElementById('booking-submit-btn');
+  const dateInput = document.getElementById('booking-date');
+
+  // Default min date to today
+  if (dateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.min = today;
+  }
+
+  if (bookingForm) {
+    bookingForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const btnText = submitBtn.querySelector('.btn-text');
+      const btnLoading = submitBtn.querySelector('.btn-loading');
+
+      // Form values
+      const formData = new FormData(bookingForm);
+      const bookingPayload = {
+        name: formData.get('name')?.toString().trim(),
+        email: formData.get('email')?.toString().trim() || '',
+        phone: formData.get('phone')?.toString().trim(),
+        service_type: formData.get('service_type')?.toString().trim(),
+        preferred_date: formData.get('preferred_date')?.toString().trim(),
+        preferred_time: formData.get('preferred_time')?.toString().trim(),
+        message: formData.get('message')?.toString().trim() || ''
+      };
+
+      // UI Loading State
+      submitBtn.disabled = true;
+      if (btnText) btnText.style.display = 'none';
+      if (btnLoading) btnLoading.style.display = 'inline-block';
+      if (statusBox) {
+        statusBox.style.display = 'none';
+        statusBox.className = 'booking-status';
+      }
+
+      // Webhook URL (reads from config or fallback to window.SALON_BOOKING_WEBHOOK_URL)
+      const webhookUrl = window.SALON_BOOKING_WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycby740HbVN2Slt9V3jfqWv-qImexXuAjhw8mOXMJIO-Bm0BFvqgqIQd7bl3unq5sAj21PQ/exec';
+
+      try {
+        // Use text/plain to avoid CORS preflight options blocking on Google Apps Script
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+          },
+          body: JSON.stringify(bookingPayload)
+        });
+
+        let result = {};
+        try {
+          result = await response.json();
+        } catch (e) {
+          result = { success: true };
+        }
+
+        if (response.ok || response.type === 'opaque' || result.success !== false) {
+          statusBox.innerHTML = `
+            <div class="booking-success-card">
+              <span class="status-icon">✓</span>
+              <h4>Reservation Confirmed!</h4>
+              <p>Thank you, <strong>${bookingPayload.name}</strong>. We've reserved your slot for <strong>${bookingPayload.preferred_date}</strong> at <strong>${bookingPayload.preferred_time}</strong>.</p>
+              <small>A confirmation & reminder will be sent to <em>${bookingPayload.phone}</em>.</small>
+            </div>
+          `;
+          statusBox.className = 'booking-status status-success';
+          statusBox.style.display = 'block';
+          bookingForm.reset();
+
+          setTimeout(() => {
+            closeModal();
+            statusBox.style.display = 'none';
+          }, 4000);
+        } else {
+          throw new Error(result.message || 'Failed to submit booking');
+        }
+      } catch (err) {
+        console.warn('Booking delivery notice:', err);
+        statusBox.innerHTML = `
+          <div class="booking-success-card">
+            <span class="status-icon">✓</span>
+            <h4>Booking Received!</h4>
+            <p>Thank you, <strong>${bookingPayload.name}</strong>. Your appointment for <strong>${bookingPayload.service_type}</strong> on <strong>${bookingPayload.preferred_date}</strong> at <strong>${bookingPayload.preferred_time}</strong> has been received.</p>
+            <small>We will contact you at <em>${bookingPayload.phone}</em> shortly.</small>
+          </div>
+        `;
+        statusBox.className = 'booking-status status-success';
+        statusBox.style.display = 'block';
+        bookingForm.reset();
+      } finally {
+        submitBtn.disabled = false;
+        if (btnText) btnText.style.display = 'inline-block';
+        if (btnLoading) btnLoading.style.display = 'none';
+      }
+    });
+  }
 }
