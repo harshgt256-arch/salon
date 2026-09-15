@@ -1,44 +1,44 @@
 /**
  * ============================================================================
- * NOIR STUDIO — 1-CLICK OWNER APPROVAL & BOOKING ENGINE
+ * NOIR STUDIO — 1-CLICK OWNER APPROVAL & BOOKING ENGINE (EMAIL & WHATSAPP)
  * ============================================================================
  *
  * Flow:
  * 1. Client books on website -> Sheet status: "PENDING_APPROVAL".
- * 2. Client gets instant email: "We received your request! Reviewing availability..."
- * 3. Salon Owner gets VIP Email Alert with 2 One-Click Buttons:
- *    - ✅ [ACCEPT BOOKING]
- *    - ❌ [DECLINE / SLOT FULL]
- * 4. When Owner clicks ACCEPT:
- *    - Status -> "CONFIRMED" (Green)
+ * 2. Client gets instant acknowledgement Email.
+ * 3. Salon Owner gets:
+ *    - 📧 VIP Email Alert with 1-Click [ACCEPT] and [DECLINE] buttons.
+ *    - 💬 WhatsApp Message with 1-Click Action Links to Accept/Decline directly from phone.
+ * 4. When Owner taps/clicks ACCEPT:
+ *    - Status -> "CONFIRMED" (Green in Google Sheets)
  *    - Event is automatically created on Google Calendar!
  *    - Client receives official confirmation Email & WhatsApp.
- * 5. When Owner clicks DECLINE:
- *    - Status -> "DECLINED" (Red)
+ * 5. When Owner taps/clicks DECLINE:
+ *    - Status -> "DECLINED" (Red in Google Sheets)
  *    - Client receives polite reschedule notice.
  * ============================================================================
  */
 
 const CONFIG = {
   SALON_NAME: "Noir Studio",
-  SALON_OWNER_EMAIL: "owner@noir-studio.com", // <-- Replace with your actual email to receive approval alerts!
-  SALON_OWNER_PHONE: "+919876543210",         // <-- Replace with owner's WhatsApp number
+  SALON_OWNER_EMAIL: "harshvasava062@gmail.com", // <-- Set your email to receive approval alerts!
+  SALON_OWNER_PHONE: "+919876543210",          // <-- Owner's WhatsApp number (with country code e.g. +91...)
   SALON_PHONE: "+1 (310) 555-0000",
   SALON_ADDRESS: "450 N Rodeo Dr, Beverly Hills, CA",
   SHEET_NAME: "Bookings",
 
-  // Twilio WhatsApp Setup (Optional)
+  // Twilio WhatsApp Setup (Free Sandbox or Production Account)
   TWILIO: {
-    ACCOUNT_SID: "",
-    AUTH_TOKEN: "",
-    WHATSAPP_FROM: "whatsapp:+14155238886"
+    ACCOUNT_SID: "", // <-- Paste your Twilio Account SID here
+    AUTH_TOKEN: "",  // <-- Paste your Twilio Auth Token here
+    WHATSAPP_FROM: "whatsapp:+14155238886" // Twilio WhatsApp Sender Number
   }
 };
 
 /**
  * Handle incoming POST requests:
- * 1. Website Form Submission -> Logs PENDING booking & sends Approval Request to Owner
- * 2. Inbound WhatsApp Reply (if Twilio is hooked)
+ * 1. Website Form Submission -> Logs PENDING booking & sends Approval Request to Owner (Email + WhatsApp)
+ * 2. Inbound Twilio WhatsApp Webhook (e.g. Owner replies YES/NO to WhatsApp)
  */
 function doPost(e) {
   try {
@@ -111,6 +111,13 @@ function doPost(e) {
       Logger.log("Owner approval email error: " + ownerErr.toString());
     }
 
+    // 4. Send 1-Click Actionable WhatsApp Message to Salon Owner
+    try {
+      sendOwnerApprovalWhatsApp(booking);
+    } catch (waErr) {
+      Logger.log("Owner WhatsApp error: " + waErr.toString());
+    }
+
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       booking_id: booking.booking_id,
@@ -130,14 +137,14 @@ function doPost(e) {
 /**
  * Handle GET requests:
  * 1. Health check
- * 2. 1-Click Owner Actions from Email Links: ?action=accept&id=BK... or ?action=decline&id=BK...
+ * 2. 1-Click Owner Actions from Email / WhatsApp Links: ?action=accept&id=BK... or ?action=decline&id=BK...
  */
 function doGet(e) {
   const params = e.parameter || {};
   const action = (params.action || "").toLowerCase();
   const bookingId = (params.id || "").trim();
 
-  // If this is a 1-Click Action from Owner's Email:
+  // If this is a 1-Click Action from Owner's Email or WhatsApp:
   if (action && bookingId) {
     return handleOwnerDecision(action, bookingId);
   }
@@ -179,7 +186,7 @@ function handleOwnerDecision(action, bookingId) {
 
   if (foundRow === -1 || !booking) {
     return HtmlService.createHtmlOutput(`
-      <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+      <div style="font-family: sans-serif; text-align: center; padding: 50px;">
         <h2 style="color: #dc3545;">⚠️ Booking Not Found</h2>
         <p>Could not locate booking ID: <strong>${bookingId}</strong>.</p>
       </div>
@@ -207,25 +214,23 @@ function handleOwnerDecision(action, bookingId) {
       }
     }
 
-    // 4. Send WhatsApp Confirmation (if configured)
-    if (CONFIG.TWILIO.ACCOUNT_SID) {
-      try {
-        sendWhatsAppConfirmation(booking);
-      } catch (e) {
-        Logger.log("WhatsApp error: " + e.toString());
-      }
+    // 4. Send WhatsApp Confirmation to Client
+    try {
+      sendClientWhatsAppConfirmation(booking);
+    } catch (e) {
+      Logger.log("Client WhatsApp error: " + e.toString());
     }
 
     return HtmlService.createHtmlOutput(`
-      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+      <div style="font-family: sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
         <div style="width: 60px; height: 60px; background: #28a745; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 30px; margin-bottom: 20px;">✓</div>
         <h2 style="color: #155724; margin-top: 0;">Appointment Confirmed!</h2>
         <p style="color: #555; font-size: 15px; line-height: 1.6;">
-          You have successfully approved <strong>${booking.client_name}</strong> for <strong>${booking.service_type}</strong> on <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.
+          You approved <strong>${booking.client_name}</strong> for <strong>${booking.service_type}</strong> on <strong>${booking.preferred_date}</strong> at <strong>${booking.preferred_time}</strong>.
         </p>
         <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 14px; text-align: left;">
           <div>📅 <strong>Google Calendar:</strong> Event automatically added</div>
-          <div style="margin-top: 6px;">✉️ <strong>Client Notification:</strong> Confirmation email & SMS dispatched</div>
+          <div style="margin-top: 6px;">✉️ <strong>Client Notification:</strong> Confirmation email & WhatsApp dispatched</div>
         </div>
         <p style="color: #888; font-size: 12px;">You may now close this tab.</p>
       </div>
@@ -245,17 +250,51 @@ function handleOwnerDecision(action, bookingId) {
       }
     }
 
+    // 3. Send Polite Reschedule WhatsApp to Client
+    try {
+      sendClientWhatsAppDeclined(booking);
+    } catch (e) {
+      Logger.log("Client decline WhatsApp error: " + e.toString());
+    }
+
     return HtmlService.createHtmlOutput(`
-      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+      <div style="font-family: sans-serif; max-width: 500px; margin: 60px auto; text-align: center; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
         <div style="width: 60px; height: 60px; background: #dc3545; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 20px;">✕</div>
         <h2 style="color: #721c24; margin-top: 0;">Appointment Declined</h2>
         <p style="color: #555; font-size: 15px; line-height: 1.6;">
-          You marked this slot as unavailable for <strong>${booking.client_name}</strong>. A polite reschedule notification has been emailed to the client.
+          You marked this slot as unavailable for <strong>${booking.client_name}</strong>. A polite reschedule notification has been sent to the client.
         </p>
         <p style="color: #888; font-size: 12px; margin-top: 20px;">You may now close this tab.</p>
       </div>
     `);
   }
+}
+
+/**
+ * 📲 Send 1-Click Actionable WhatsApp Message to Salon Owner
+ */
+function sendOwnerApprovalWhatsApp(booking) {
+  if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) {
+    Logger.log("Twilio credentials not configured, skipping owner WhatsApp.");
+    return;
+  }
+
+  const scriptUrl = ScriptApp.getService().getUrl();
+  const acceptUrl = `${scriptUrl}?action=accept&id=${booking.booking_id}`;
+  const declineUrl = `${scriptUrl}?action=decline&id=${booking.booking_id}`;
+
+  const message =
+    `🔔 *NEW APPOINTMENT REQUEST*\n\n` +
+    `👤 *Client:* ${booking.client_name}\n` +
+    `💇 *Service:* ${booking.service_type}\n` +
+    `📅 *Date:* ${booking.preferred_date}\n` +
+    `⏰ *Time:* ${booking.preferred_time}\n` +
+    `📞 *Phone:* ${booking.client_phone}\n` +
+    `📝 *Notes:* ${booking.message || 'None'}\n\n` +
+    `👉 *Tap to Accept & Add to Calendar:*\n${acceptUrl}\n\n` +
+    `👉 *Tap to Decline / Slot Full:*\n${declineUrl}`;
+
+  sendTwilioWhatsApp(CONFIG.SALON_OWNER_PHONE, message);
 }
 
 /**
@@ -269,7 +308,7 @@ function sendOwnerApprovalEmail(booking) {
   const subject = `🔔 [ACTION REQUIRED] New Booking Request: ${booking.client_name} (${booking.preferred_date} @ ${booking.preferred_time})`;
 
   const htmlBody = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;">
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;">
       <div style="background: #232323; color: #C9A96A; padding: 24px; text-align: center;">
         <h2 style="margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;">New Appointment Request</h2>
         <p style="margin: 4px 0 0; font-size: 13px; color: #EDE8DF;">${CONFIG.SALON_NAME} Concierge</p>
@@ -278,7 +317,7 @@ function sendOwnerApprovalEmail(booking) {
       <div style="padding: 24px 28px; color: #333; line-height: 1.6;">
         <p style="font-size: 15px; margin-top: 0;">A client has requested an appointment slot. Please review and approve:</p>
 
-        <div style="background: #F9F7F4; border-left: 4px solid #C9A96A; padding: 16px; margin: 16px 0; font-size: 14px;">
+        <div style="background: #F9F7F4; border: 1px solid #E5DFD5; padding: 16px; margin: 16px 0; font-size: 14px; border-radius: 6px;">
           <p style="margin: 4px 0;"><strong>👤 Client:</strong> ${booking.client_name}</p>
           <p style="margin: 4px 0;"><strong>💇 Service:</strong> ${booking.service_type}</p>
           <p style="margin: 4px 0;"><strong>📅 Date:</strong> ${booking.preferred_date}</p>
@@ -396,6 +435,121 @@ function sendClientDeclinedEmail(booking) {
     subject: subject,
     htmlBody: htmlBody
   });
+}
+
+/**
+ * Send WhatsApp Confirmation to Client
+ */
+function sendClientWhatsAppConfirmation(booking) {
+  if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
+
+  const msg =
+    `✨ *Booking Confirmed at ${CONFIG.SALON_NAME}!*\n\n` +
+    `Dear ${booking.client_name}, your appointment is officially approved.\n\n` +
+    `💇 *Service:* ${booking.service_type}\n` +
+    `📅 *Date:* ${booking.preferred_date}\n` +
+    `⏰ *Time:* ${booking.preferred_time}\n` +
+    `📍 *Location:* ${CONFIG.SALON_ADDRESS}\n` +
+    `🔖 *ID:* ${booking.booking_id}\n\n` +
+    `We look forward to pampering you! See you soon.`;
+
+  sendTwilioWhatsApp(booking.client_phone, msg);
+}
+
+/**
+ * Send WhatsApp Decline Notice to Client
+ */
+function sendClientWhatsAppDeclined(booking) {
+  if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
+
+  const msg =
+    `Hello ${booking.client_name},\n\n` +
+    `Thank you for requesting an appointment at ${CONFIG.SALON_NAME}.\n` +
+    `Unfortunately, our stylists are fully booked for ${booking.service_type} on ${booking.preferred_date} at ${booking.preferred_time}.\n\n` +
+    `Please call us at ${CONFIG.SALON_PHONE} to reschedule to a time that suits you!`;
+
+  sendTwilioWhatsApp(booking.client_phone, msg);
+}
+
+/**
+ * Core Twilio Outbound Dispatcher
+ */
+function sendTwilioWhatsApp(toPhone, messageBody) {
+  if (!CONFIG.TWILIO.ACCOUNT_SID || !CONFIG.TWILIO.AUTH_TOKEN) return;
+
+  let cleanPhone = toPhone.toString().replace(/[^\d+]/g, '');
+  if (!cleanPhone.startsWith('+')) {
+    cleanPhone = '+91' + cleanPhone; // Default to India (+91) if no country code provided
+  }
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${CONFIG.TWILIO.ACCOUNT_SID}/Messages.json`;
+  const payload = {
+    To: `whatsapp:${cleanPhone}`,
+    From: CONFIG.TWILIO.WHATSAPP_FROM,
+    Body: messageBody
+  };
+
+  const options = {
+    method: "post",
+    headers: {
+      "Authorization": "Basic " + Utilities.base64Encode(`${CONFIG.TWILIO.ACCOUNT_SID}:${CONFIG.TWILIO.AUTH_TOKEN}`)
+    },
+    payload: payload,
+    muteHttpExceptions: true
+  };
+
+  const resp = UrlFetchApp.fetch(url, options);
+  Logger.log(`Twilio WhatsApp dispatch to ${cleanPhone}: ` + resp.getContentText());
+}
+
+/**
+ * Inbound WhatsApp webhook handler (Optional Twilio interactive replies)
+ */
+function handleTwilioInboundWhatsApp(params) {
+  const from = params.From || "";
+  const body = (params.Body || "").trim();
+  const phone = from.replace("whatsapp:", "").replace(/[^\d]/g, "");
+
+  Logger.log(`Received WhatsApp reply from ${from}: ${body}`);
+
+  return ContentService.createTextOutput(`
+    <Response>
+      <Message>Thank you for reaching out to ${CONFIG.SALON_NAME}. Our team will assist you shortly.</Message>
+    </Response>
+  `).setMimeType(ContentService.MimeType.XML);
+}
+
+/**
+ * Daily 24h WhatsApp Reminder Trigger (9:00 AM Cron)
+ */
+function sendDailyAppointmentReminders() {
+  const sheet = getOrCreateBookingsSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = Utilities.formatDate(tomorrow, Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const preferredDate = row[5] ? Utilities.formatDate(new Date(row[5]), Session.getScriptTimeZone(), "yyyy-MM-dd") : "";
+    const status = (row[8] || "").toString().toUpperCase();
+    const phone = row[3];
+    const name = row[1];
+    const service = row[4];
+    const time = row[6];
+
+    if (preferredDate === tomorrowStr && status === "CONFIRMED" && phone) {
+      const reminderMsg =
+        `Hi ${name} ✨\n\n` +
+        `This is a friendly reminder from *${CONFIG.SALON_NAME}* about your appointment tomorrow for *${service}* at *${time}*.\n\n` +
+        `📍 Location: ${CONFIG.SALON_ADDRESS}\n\n` +
+        `Reply *YES* to confirm or *RESCHEDULE* if you need to adjust your slot.`;
+
+      sendTwilioWhatsApp(phone, reminderMsg);
+    }
+  }
 }
 
 /**
